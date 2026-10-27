@@ -1,0 +1,55 @@
+# Terminal dependencies. Existing commands satisfy these requirements regardless
+# of whether they came from a website installer, a version manager, or the OS.
+# Package managers are fallbacks for missing commands. No desktop apps or fonts.
+
+[packages.darwin]
+brews = [
+    { name = "bat", commands = ["bat"] },
+    { name = "bat-extras", commands = ["batman"] },
+    { name = "curl", commands = ["curl"] },
+    { name = "eza", commands = ["eza"] },
+    { name = "fd", commands = ["fd"] },
+    { name = "fzf", commands = ["fzf"] },
+    { name = "gh", commands = ["gh"] },
+    { name = "git", commands = ["git"] },
+    { name = "git-delta", commands = ["delta"] },
+    { name = "git-lfs", commands = ["git-lfs"] },
+    { name = "htop", commands = ["htop"] },
+    { name = "jq", commands = ["jq"] },
+    { name = "lazygit", commands = ["lazygit"] },
+    { name = "node", commands = ["node", "npm", "npx"] },
+    { name = "ripgrep", commands = ["rg"] },
+    { name = "rsync", commands = ["rsync"] },
+    { name = "starship", commands = ["starship"] },
+    { name = "tmux", commands = ["tmux"] },
+    { name = "uv", commands = ["uv"] },
+    { name = "vim", commands = ["vim"] },
+    { name = "yazi", commands = ["yazi"] },
+    { name = "zoxide", commands = ["zoxide"] },
+    { name = "zsh", commands = ["zsh"] },
+]
+
+# The configured research servers use Ubuntu and Bash. Keep their login shell.
+[packages.linux]
+apt = [
+    { name = "bash", commands = ["bash"] },
+    # Bash completion is sourced data rather than a standalone command.
+    { name = "bash-completion", commands = [] },
+    { name = "bat", commands = ["bat"] },
+    { name = "build-essential", commands = ["cc", "c++", "make"] },
+    # Certificate data has no command to probe; check its native package instead.
+    { name = "ca-certificates", commands = [] },
+    { name = "curl", commands = ["curl"] },
+    { name = "git", commands = ["git"] },
+    { name = "git-delta", commands = ["delta"] },
+    { name = "git-lfs", commands = ["git-lfs"] },
+    { name = "htop", commands = ["htop"] },
+    { name = "jq", commands = ["jq"] },
+    { name = "less", commands = ["less"] },
+    { name = "openssh-client", commands = ["ssh", "scp", "sftp"] },
+    { name = "ripgrep", commands = ["rg"] },
+    { name = "rsync", commands = ["rsync"] },
+    { name = "tmux", commands = ["tmux"] },
+    { name = "unzip", commands = ["unzip"] },
+    { name = "vim", commands = ["vim"] },
+]

@@ -1,0 +1,130 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/sh
+set -eu
+
+# This intentionally runs on each apply: restore missing installs and links,
+# but never downgrade or update an already registered skill. The CLI owns its
+# files and lock metadata. Use `npx skills update -g` for explicit upgrades.
+{{ template "command-path.sh" . }}
+skill_home={{ joinPath .chezmoi.homeDir ".agents/skills" | quote }}
+claude_skills={{ joinPath .chezmoi.homeDir ".claude/skills" | quote }}
+skill_lock={{ joinPath .chezmoi.homeDir ".agents/.skill-lock.json" | quote }}
+
+command -v jq >/dev/null 2>&1 || {
+    printf '%s\n' 'Agent skill setup needs jq; run the terminal dependency installer first.' >&2
+    exit 1
+}
+if [ -f "$skill_lock" ]; then
+    jq -e 'type == "object" and ((.skills // {}) | type == "object")' "$skill_lock" >/dev/null
+fi
+
+check_link() {
+    name=$1
+    link=$claude_skills/$name
+    if [ -L "$link" ]; then
+        existing=$(readlink "$link")
+        [ "$existing" = "../../.agents/skills/$name" ] || [ "$existing" = "$skill_home/$name" ] || {
+            printf 'Claude skill link %s points elsewhere; reconcile it before applying.\n' "$link" >&2
+            return 1
+        }
+    elif [ -e "$link" ]; then
+        printf 'Claude skill %s already exists as a file/directory; preserve it and reconcile the conflict.\n' "$link" >&2
+        return 1
+    fi
+}
+
+install_missing() {
+    source=$1
+    shift
+    missing=''
+    for name do
+        check_link "$name"
+        # A symlinked skill points at a local development checkout; leave it.
+        [ -L "$skill_home/$name" ] && [ -f "$skill_home/$name/SKILL.md" ] && continue
+        registered_source=''
+        if [ -f "$skill_lock" ]; then
+            registered_source=$(jq -r --arg name "$name" '.skills[$name].source // empty' "$skill_lock")
+        fi
+        if [ -n "$registered_source" ] && [ "$registered_source" != "$source" ]; then
+            printf 'Skill %s is registered to %s, expected %s; reconcile it before applying.\n' \
+                "$name" "$registered_source" "$source" >&2
+            return 1
+        fi
+        if [ ! -f "$skill_home/$name/SKILL.md" ] || [ -z "$registered_source" ]; then
+            missing="$missing $name"
+        fi
+    done
+    [ -n "$missing" ] || return 0
+    command -v npx >/dev/null 2>&1 || {
+        printf '%s\n' 'Agent skill setup needs Node.js/npx; install it and apply again.' >&2
+        return 1
+    }
+    # Skill names come from the reviewed manifest and contain no whitespace or
+    # glob characters. Disable glob expansion before splitting that list.
+    set -f
+    set -- $missing
+    printf 'Installing/registering missing skills from %s: %s\n' "$source" "$*"
+    npx --yes skills@latest add "$source" --global --agent claude-code --skill "$@" --yes
+    for name do
+        if [ ! -f "$skill_home/$name/SKILL.md" ]; then
+            printf 'Installer did not create skill %s; apply can be retried.\n' "$name" >&2
+            return 1
+        fi
+        jq -e --arg name "$name" --arg source "$source" \
+            '.skills[$name].source == $source' "$skill_lock" >/dev/null || {
+            printf 'Installer did not register skill %s; apply can be retried.\n' "$name" >&2
+            return 1
+        }
+    done
+    set +f
+}
+
+{{ range .agent_skills.sources -}}
+install_missing {{ .source | quote }}{{ range .skills }} {{ . | quote }}{{ end }}
+{{ end }}
+
+# Hugging Face skills belong to `hf skills` (its manifest, `hf skills update -g`),
+# not the skills CLI lock. Only install the missing ones.
+install_missing_hf() {
+    for name do
+        check_link "$name"
+        [ -f "$skill_home/$name/SKILL.md" ] && continue
+        command -v hf >/dev/null 2>&1 || {
+            printf 'Skill %s needs the Hugging Face CLI (hf); install it and apply again.\n' "$name" >&2
+            return 1
+        }
+        printf 'Installing missing Hugging Face skill: %s\n' "$name"
+        hf skills add "$name" --global
+        [ -f "$skill_home/$name/SKILL.md" ] || {
+            printf 'hf did not create skill %s; apply can be retried.\n' "$name" >&2
+            return 1
+        }
+    done
+}
+
+install_missing_hf{{ range .agent_skills.hf.skills }} {{ . | quote }}{{ end }}
+
+# Include repository-owned and subsequently installed skills as well. Leave
+# cloud-synced and unrelated Claude skill directories alone. A conflicting
+# Claude directory/link is reported, never removed or replaced silently.
+mkdir -p "$claude_skills"
+for skill in "$skill_home"/*; do
+    [ -f "$skill/SKILL.md" ] || continue
+    name=${skill##*/}
+    link=$claude_skills/$name
+    target=../../.agents/skills/$name
+    if [ -L "$link" ]; then
+        existing=$(readlink "$link")
+        [ "$existing" = "$target" ] && continue
+        if [ "$existing" = "$skill" ]; then
+            ln -sfn "$target" "$link"
+            continue
+        fi
+    elif [ ! -e "$link" ]; then
+        ln -s "$target" "$link"
+        continue
+    fi
+    printf 'Cannot link Claude skill %s: another file or link already occupies %s.\n' "$name" "$link" >&2
+    exit 1
+done
+{{ end -}}

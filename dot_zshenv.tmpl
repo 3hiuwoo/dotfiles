@@ -1,0 +1,18 @@
+{{ if eq .chezmoi.os "darwin" -}}
+# Suppress zoxide's "doctor" false positive under Claude Code.
+# Claude Code runs commands via a shell snapshot that captures zoxide's
+# functions but not its chpwd hook registration, so the doctor wrongly
+# thinks zoxide is misconfigured. Our interactive .zshrc is correct.
+# .zshenv is sourced by every zsh (incl. non-interactive snapshot shells),
+# so setting it here guarantees the var is present when the doctor runs.
+export _ZO_DOCTOR=0
+{{ end }}
+# This file also runs in non-interactive shells; avoid external commands here.
+typeset -U path
+{{ if eq .chezmoi.os "darwin" -}}
+[[ -d "$HOME/.qoder-cn/entry" ]] && path=("$HOME/.qoder-cn/entry" "${path[@]}")
+{{ end }}
+# Machine-specific non-interactive settings are deliberately not synced.
+if [[ -r "$HOME/.zshenv.local" ]]; then
+    source "$HOME/.zshenv.local"
+fi

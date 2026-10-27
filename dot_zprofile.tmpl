@@ -1,0 +1,26 @@
+# Initialize an installed Homebrew on Apple Silicon, Intel macOS, or Linux.
+() {
+    local brew_command
+    if (( $+commands[brew] )); then
+        brew_command=$commands[brew]
+    else
+        for brew_command in /opt/homebrew/bin/brew /usr/local/bin/brew \
+            /home/linuxbrew/.linuxbrew/bin/brew "$HOME/.linuxbrew/bin/brew"; do
+            [[ -x $brew_command ]] && break
+        done
+    fi
+    [[ -x $brew_command ]] && eval "$("$brew_command" shellenv)"
+}
+
+typeset -U path
+path=("$HOME/.local/bin" "${path[@]}")
+if [[ $OSTYPE == darwin* && -d /Applications/Obsidian.app/Contents/MacOS ]]; then
+    path+=(/Applications/Obsidian.app/Contents/MacOS)
+fi
+{{ if eq .chezmoi.os "darwin" -}}
+[[ -d "$HOME/.qoder-cn/entry" ]] && path=("$HOME/.qoder-cn/entry" "${path[@]}")
+{{ end }}
+# Machine-specific login settings are deliberately not synced.
+if [[ -r "$HOME/.zprofile.local" ]]; then
+    source "$HOME/.zprofile.local"
+fi

@@ -1,0 +1,110 @@
+{
+  "version": 4,
+  "lines": [
+    [
+      {
+        "id": "bb9a0613-2579-48e9-9f2c-31588c21cff3",
+        "type": "model",
+        "rawValue": true
+      },
+      {
+        "id": "1e652890-24d2-4ed4-9adb-331f6cdc1866",
+        "type": "separator"
+      },
+      {
+        "id": "8edac7ec-aa5a-443d-9752-b508d9bb98ed",
+        "type": "thinking-effort",
+        "rawValue": true
+      },
+      {
+        "id": "417acee0-11c7-4ffc-a240-603017b18fe5",
+        "type": "separator"
+      },
+      {
+        "id": "5",
+        "type": "context-bar",
+        "color": "magenta",
+        "rawValue": true,
+        "metadata": {
+          "display": "progress-short"
+        }
+      }
+    ],
+    [
+      {
+        "id": "89b8fca0-1652-45bf-8309-fb145bc2ae45",
+        "type": "current-working-dir",
+        "rawValue": true,
+        "merge": true,
+        "metadata": {
+          "fishStyle": "true"
+        }
+      },
+      {
+        "id": "fc6033ea-67ad-4758-a431-91290615f3b4",
+        "type": "separator"
+      },
+      {
+        "id": "b166db33-9401-4daf-a07a-23a3f0b039f2",
+        "type": "git-root-dir",
+        "color": "brightBlue",
+        "merge": true,
+        "metadata": {
+          "linkToIDE": "vscode"
+        }
+      },
+      {
+        "id": "7ae7ff9a-bec7-4127-9fb3-ffe792551f4b",
+        "type": "separator"
+      },
+      {
+        "id": "f1190ada-7afb-43aa-b007-a2d1d2fdff52",
+        "type": "git-branch",
+        "color": "brightMagenta",
+        "rawValue": false,
+        "merge": true,
+        "metadata": {
+          "linkToGitHub": "true"
+        }
+      },
+      {
+        "id": "dc28f7e6-8b76-4fb0-9aa0-f7b076efc404",
+        "type": "separator"
+      },
+      {
+        "id": "b1e1562e-355c-4b37-a824-6aaa13d38043",
+        "type": "git-worktree"
+      },
+      {
+        "id": "84086967-6d57-43b7-863a-deb8a3908e6b",
+        "type": "separator"
+      },
+      {
+        "id": "17e2b52b-761a-416c-b3a3-98ea0f3885e8",
+        "type": "git-changes",
+        "metadata": {
+          "hide": "no-git"
+        }
+      }
+    ]
+  ],
+  "flexMode": "full",
+  "compactThreshold": 60,
+  "colorLevel": 3,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": false,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": false,
+    "continueThemeAcrossLines": false
+  }
+}

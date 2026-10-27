@@ -1,0 +1,4 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- $local := .chezmoi.stdin | default "{}" | mustFromJson -}}
+{{- $shared := include ".chezmoitemplates/claude/settings.json" | mustFromJson -}}
+{{- mustMergeOverwrite $local $shared | toPrettyJson }}

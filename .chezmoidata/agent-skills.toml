@@ -1,0 +1,26 @@
+# Desired global skills. Installed files and lock metadata belong to the skills CLI.
+# No revisions: a missing installation is restored from current upstream.
+
+[[agent_skills.sources]]
+source = "vercel-labs/agent-browser"
+skills = ["agent-browser"]
+
+[[agent_skills.sources]]
+source = "vercel-labs/skills"
+skills = ["find-skills"]
+
+[[agent_skills.sources]]
+source = "exa-labs/agent-skills"
+skills = ["build-with-exa", "company-research", "exa-contents", "exa-search", "lead-generation"]
+
+[[agent_skills.sources]]
+source = "firecrawl/skills"
+skills = ["firecrawl", "firecrawl-agent", "firecrawl-alexandria", "firecrawl-business-contacts", "firecrawl-company-directories", "firecrawl-competitive-intel", "firecrawl-crawl", "firecrawl-dashboard-reporting", "firecrawl-deep-research", "firecrawl-demo-walkthrough", "firecrawl-developer-index", "firecrawl-download", "firecrawl-fantasy-sports", "firecrawl-interact", "firecrawl-job-postings", "firecrawl-knowledge-base", "firecrawl-knowledge-ingest", "firecrawl-lead-gen", "firecrawl-lead-research", "firecrawl-map", "firecrawl-market-research", "firecrawl-monitor", "firecrawl-parse", "firecrawl-qa", "firecrawl-research-index", "firecrawl-research-papers", "firecrawl-scrape", "firecrawl-search", "firecrawl-seo-audit", "firecrawl-shop", "firecrawl-website-design-clone", "firecrawl-workflows"]
+
+[[agent_skills.sources]]
+source = "3hiuwoo/miaa-bibtex"
+skills = ["miaa-bibtex-acquire", "miaa-bibtex-complete", "miaa-bibtex-core", "miaa-bibtex-curate", "miaa-bibtex-decide", "miaa-bibtex-doctor", "miaa-bibtex-library", "miaa-bibtex-pdfs", "miaa-bibtex-refresh", "miaa-bibtex-review", "miaa-bibtex-scholar", "miaa-bibtex-upgrade", "miaa-bibtex-verify"]
+
+# Installed and updated by the Hugging Face CLI (`hf skills update -g`).
+[agent_skills.hf]
+skills = ["hf-cli", "huggingface-papers"]

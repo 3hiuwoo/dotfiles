@@ -1,0 +1,125 @@
+{
+  "cleanupPeriodDays": 720,
+  "env": {
+    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "true",
+    "ENABLE_TOOL_SEARCH": "true",
+    "TZ": "America/New_York"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'"
+          }
+        ]
+      }
+    ]
+  },
+  "enableWorkflows": true,
+  "statusLine": {
+    "type": "command",
+    "command": "npx -y ccstatusline@latest",
+    "padding": 0
+  },
+  "enabledPlugins": {
+    "eli5@claude-community": true,
+    "context7@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "learning-output-style@claude-plugins-official": true,
+    "firecrawl@claude-plugins-official": true,
+    "huggingface-skills@claude-plugins-official": true,
+    "exa@claude-plugins-official": true,
+    "plugin-dev@anthropic-plugin-directory": true,
+    "cc-plugin-you-should-know@builtin": true,
+    "engineering@synced": true,
+    "obsidian@obsidian-skills": true,
+    "codex@openai-codex": true,
+    "claude-code-wakatime@wakatime": true
+  },
+  "extraKnownMarketplaces": {
+    "ai-research-skills": {
+      "source": {
+        "source": "github",
+        "repo": "orchestra-research/AI-research-SKILLs"
+      }
+    },
+    "anthropic-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/skills"
+      }
+    },
+    "claude-code-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-code"
+      }
+    },
+    "claude-community": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-community"
+      }
+    },
+    "huggingface-skills": {
+      "source": {
+        "source": "github",
+        "repo": "huggingface/skills"
+      }
+    },
+    "obsidian-skills": {
+      "source": {
+        "source": "github",
+        "repo": "kepano/obsidian-skills"
+      },
+      "autoUpdate": true
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    },
+    "wakatime": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/wakatime/claude-code-wakatime.git"
+      }
+    }
+  },
+  "skipWebFetchPreflight": true,
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "medium",
+  "modelSettings": {
+    "claude-fable-5-1": {
+      "effortLevel": "high"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "xhigh"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "medium"
+    }
+  },
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "auto",
+  "editorMode": "vim",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
+}

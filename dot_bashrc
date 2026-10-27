@@ -1,0 +1,130 @@
+# Interactive Bash configuration for Linux servers.
+# ssh commands, scp, and other non-interactive sessions must stay quiet.
+case $- in
+    *i*) ;;
+    *) return ;;
+esac
+_CHEZMOI_BASHRC_LOADED=$$
+
+[[ -r "$HOME/env.sh" ]] && source "$HOME/env.sh"
+
+# History remains local; append so concurrent shells do not overwrite it.
+HISTFILE=$HOME/.bash_history
+HISTSIZE=2000
+HISTFILESIZE=1000
+HISTCONTROL=ignoreboth
+shopt -s histappend checkwinsize
+
+# Initialize an existing Conda/Mamba installation without activating base.
+_dotfiles_init_conda() {
+    local conda_root conda_exe_root=
+    if [[ -n ${CONDA_EXE:-} ]]; then
+        conda_exe_root=${CONDA_EXE%/*}
+        conda_exe_root=${conda_exe_root%/*}
+    fi
+    for conda_root in "${CONDA_HOME:-}" "$conda_exe_root" \
+        "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/anaconda3"; do
+        [[ -n $conda_root && -r "$conda_root/etc/profile.d/conda.sh" ]] || continue
+        source "$conda_root/etc/profile.d/conda.sh"
+        [[ -r "$conda_root/etc/profile.d/mamba.sh" ]] && source "$conda_root/etc/profile.d/mamba.sh"
+        break
+    done
+}
+_dotfiles_init_conda
+unset -f _dotfiles_init_conda
+
+# Use system Bash completions when installed; never download during startup.
+if ! declare -p BASH_COMPLETION_VERSINFO >/dev/null 2>&1; then
+    if [[ -r /usr/share/bash-completion/bash_completion ]]; then
+        source /usr/share/bash-completion/bash_completion
+    elif [[ -r /etc/bash_completion ]]; then
+        source /etc/bash_completion
+    fi
+fi
+
+# Optional runtimes already installed by the user.
+if [[ -d ${BUN_INSTALL:-$HOME/.bun}/bin ]]; then
+    case :$PATH: in
+        *":${BUN_INSTALL:-$HOME/.bun}/bin:"*) ;;
+        *) PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH" ;;
+    esac
+fi
+[[ -s ${NVM_DIR:-$HOME/.nvm}/nvm.sh ]] && source "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+[[ -s ${NVM_DIR:-$HOME/.nvm}/bash_completion ]] && source "${NVM_DIR:-$HOME/.nvm}/bash_completion"
+[[ -r "$HOME/.secrets" ]] && source "$HOME/.secrets"
+
+# Familiar terminal aliases; optional tools are used only when available.
+if command -v eza >/dev/null 2>&1; then
+    alias ls='eza --icons=auto -a'
+    alias tree='ls --tree'
+    alias ll='ls -alh --git'
+else
+    alias ls='ls --color=auto'
+    alias ll='ls -alh'
+fi
+if command -v bat >/dev/null 2>&1; then
+    alias cat='bat --paging=never'
+elif command -v batcat >/dev/null 2>&1; then
+    alias bat=batcat
+    alias cat='batcat --paging=never'
+fi
+command -v batman >/dev/null 2>&1 && alias man=batman
+command -v lazygit >/dev/null 2>&1 && alias lg=lazygit
+if command -v uv >/dev/null 2>&1; then
+    alias pip='uv pip'
+    alias ut='uv tool'
+fi
+alias g=git
+alias gs='git status'
+alias gc='git commit'
+alias cppcompile='c++ -std=c++11'
+alias mv='mv -i'
+alias mkdir='mkdir -p'
+alias df='df -h'
+
+mkcd() {
+    if [[ $# -ne 1 ]]; then
+        printf 'Usage: mkcd DIRECTORY\n' >&2
+        return 2
+    fi
+    command mkdir -p -- "$1" && cd -- "$1"
+}
+
+# Match the vi editing mode used in the Mac's zsh, with familiar insert bindings.
+set -o vi
+bind 'set completion-ignore-case on'
+bind -m vi-insert '"\e[A": history-search-backward'
+bind -m vi-insert '"\e[B": history-search-forward'
+bind -m vi-insert '"\C-a": beginning-of-line'
+bind -m vi-insert '"\C-e": end-of-line'
+bind -m vi-insert '"\eb": backward-word'
+bind -m vi-insert '"\ef": forward-word'
+bind -m vi-insert '"\C-k": kill-line'
+
+# New FZF releases provide their own Bash initialization. Older distro releases
+# may provide scripts instead. Failure to find bindings does not block startup.
+if command -v fzf >/dev/null 2>&1; then
+    if _dotfiles_fzf_init=$(fzf --bash 2>/dev/null); then
+        eval "$_dotfiles_fzf_init"
+    else
+        for _dotfiles_fzf_dir in /usr/share/doc/fzf/examples /usr/share/fzf; do
+            [[ -r "$_dotfiles_fzf_dir/key-bindings.bash" ]] || continue
+            source "$_dotfiles_fzf_dir/key-bindings.bash"
+            [[ -r "$_dotfiles_fzf_dir/completion.bash" ]] && source "$_dotfiles_fzf_dir/completion.bash"
+            break
+        done
+    fi
+    unset _dotfiles_fzf_init _dotfiles_fzf_dir
+fi
+
+# A useful SSH prompt without requiring a prompt manager or a Nerd Font.
+case ${TERM:-dumb} in
+    dumb|'') PS1='\u@\h:\w\$ ' ;;
+    *) PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ ' ;;
+esac
+command -v starship >/dev/null 2>&1 && eval "$(starship init bash)"
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init bash --cmd cd)"
+
+# Keep machine-specific settings and credentials outside chezmoi and Git.
+[[ -r "$HOME/.bashrc.local" ]] && source "$HOME/.bashrc.local"
+:

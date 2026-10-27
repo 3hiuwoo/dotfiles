@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+# Theme SHA-256: {{ include ".chezmoitemplates/catppuccin-mocha.tmTheme" | sha256sum }}
+# Older Delta releases need Bat's theme cache even when Bat itself bundles Mocha.
+{{ template "command-path.sh" . }}
+if command -v bat >/dev/null 2>&1; then
+    bat_command=bat
+elif command -v batcat >/dev/null 2>&1; then
+    bat_command=batcat
+else
+    printf '%s\n' 'Bat is required to build the Delta theme cache; install bat and rerun chezmoi apply.' >&2
+    exit 1
+fi
+
+# Delta reads the XDG cache path on both macOS and Linux, independently of
+# BAT_CACHE_PATH. Keep generated binary caches out of the source repository.
+"$bat_command" cache --build \
+    --source {{ joinPath .chezmoi.homeDir ".config/bat" | quote }} \
+    --target "${XDG_CACHE_HOME:-$HOME/.cache}/bat"

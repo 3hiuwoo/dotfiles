@@ -1,0 +1,294 @@
+" ~/.vimrc -- Vim settings and configuration for existing native packages.
+set nocompatible
+let mapleader = ' '
+filetype plugin indent on
+
+" Editing: four spaces by default; filetype indentation can override this.
+set autoindent
+set expandtab
+set tabstop=4 shiftwidth=4 softtabstop=4
+set backspace=indent,eol,start
+set hidden
+set nojoinspaces
+set nofoldenable
+set history=8192
+
+" Keep project commands rooted where Vim was launched. Use :cd to change it.
+set noautochdir
+
+" Restore undo history across Vim sessions without cluttering project folders.
+if has('persistent_undo')
+    call mkdir(expand('~/.vim/undo'), 'p', 0700)
+    set undodir=~/.vim/undo
+    set undofile
+endif
+
+" Reopen files at the last cursor position, following Vim's defaults.vim.
+augroup VimrcLastPosition
+    autocmd!
+    autocmd BufReadPost *
+        \ if line("'\"") >= 1 && line("'\"") <= line('$')
+        \ && &filetype !~# 'commit' && index(['xxd', 'gitrebase', 'tutor'], &filetype) < 0 && !&diff
+        \ | execute "normal! g`\""
+        \ | endif
+augroup END
+
+" Reload externally changed files when there are no unsaved buffer changes.
+set autoread
+augroup VimrcFileChanges
+    autocmd!
+    autocmd FocusGained,BufEnter * if getcmdwintype() ==# '' | checktime | endif
+augroup END
+
+" Search: lowercase ignores case; capitals make a search case-sensitive.
+set ignorecase smartcase incsearch hlsearch
+
+" Command-line completion and responsive terminal key sequences.
+set wildmenu
+set wildmode=longest:full,full
+set wildignorecase
+set timeout timeoutlen=1000 ttimeout ttimeoutlen=100
+
+" Display.
+syntax on
+set number
+set laststatus=2
+set shortmess+=I
+set showmatch
+set linebreak
+set scrolloff=5
+set listchars=tab:>>,nbsp:~,trail:.
+set lazyredraw
+set noerrorbells visualbell t_vb=
+set mouse=a
+if has('termguicolors')
+    set termguicolors
+endif
+
+" Use the default theme until Catppuccin is installed on a new machine.
+let g:lightline = {'colorscheme': 'default'}
+try
+    colorscheme catppuccin_mocha
+    let g:lightline.colorscheme = 'catppuccin_mocha'
+catch /^Vim\%((\a\+)\)\=:E185:/
+    colorscheme default
+endtry
+
+" Show the mode when lightline is absent; handle startup and :source alike.
+let &showmode = !get(g:, 'loaded_lightline', 0)
+augroup VimrcStatusline
+    autocmd!
+    autocmd VimEnter * let &showmode = !get(g:, 'loaded_lightline', 0)
+augroup END
+
+" Highlight the cursor line only in the active window.
+augroup CursorLineOnlyInActiveWindow
+    autocmd!
+    autocmd VimEnter,WinEnter,BufWinEnter * setlocal cursorline
+    autocmd WinLeave * setlocal nocursorline
+augroup END
+
+inoremap jj <Esc>
+
+" Splits and window navigation.
+set splitbelow splitright
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-h> <C-w>h
+nnoremap <C-l> <C-w>l
+
+" Move through wrapped display lines; counts such as 5j use file lines.
+nnoremap <expr> j v:count == 0 ? 'gj' : 'j'
+nnoremap <expr> k v:count == 0 ? 'gk' : 'k'
+
+" Disable Ex mode; keep your existing normal-mode arrow-key reminders.
+nnoremap Q <Nop>
+nnoremap <Left>  :echoe "Use h"<CR>
+nnoremap <Right> :echoe "Use l"<CR>
+nnoremap <Up>    :echoe "Use k"<CR>
+nnoremap <Down>  :echoe "Use j"<CR>
+
+" Existing relative-number toggle; optional whitespace display.
+nnoremap <silent> <C-n> :set relativenumber!<CR>
+nnoremap <silent> <Leader>tl :set list!<CR>
+
+" Keep native / search; clear highlights and center search results.
+nnoremap <silent> <Leader><Space> :nohlsearch<CR>
+nnoremap n nzzzv
+nnoremap N Nzzzv
+
+" Keep a visual selection while adjusting indentation.
+xnoremap < <gv
+xnoremap > >gv
+
+" Buffers and quickfix search results.
+nnoremap <silent> <Leader>b :ls<CR>:buffer<Space>
+nnoremap <silent> ]b :bnext<CR>
+nnoremap <silent> [b :bprevious<CR>
+nnoremap <silent> ]q :cnext<CR>
+nnoremap <silent> [q :cprevious<CR>
+nnoremap <silent> <Leader>q :copen<CR>
+
+" Edit and reload this configuration. Restart Vim after migrating old mappings.
+nnoremap <silent> <Leader>ev :edit $MYVIMRC<CR>
+nnoremap <silent> <Leader>sv :source $MYVIMRC<CR>
+
+" Share the desktop clipboard only when this Vim build and session support it.
+if has('clipboard')
+    if has('macunix')
+        set clipboard=unnamed
+    elseif has('unnamedplus') && (!empty($DISPLAY) || !empty($WAYLAND_DISPLAY))
+        set clipboard=unnamedplus
+    endif
+endif
+
+" CtrlP: include dotfiles and exclude version-control internals.
+let g:ctrlp_switch_buffer = 0
+let g:ctrlp_show_hidden = 1
+let g:ctrlp_map = '<c-p>'
+let g:ctrlp_cmd = 'CtrlP'
+let g:ctrlp_custom_ignore = '\v[\\/]\.(git|hg|svn)$'
+
+" Both file pickers use fresh, ignore-aware lists when ripgrep is available.
+if executable('rg')
+    let s:list_files = 'rg --files --hidden -g "!.git" -g "!.hg" -g "!.svn"'
+    let g:ctrlp_user_command = s:list_files . ' -- %s'
+    let g:ctrlp_use_caching = 0
+    if empty($FZF_DEFAULT_COMMAND)
+        let $FZF_DEFAULT_COMMAND = s:list_files
+    endif
+endif
+
+" Ack: use ripgrep when available, otherwise retain the plugin's Ack default.
+if executable('rg')
+    let g:ackprg = 'rg --vimgrep --smart-case'
+endif
+nnoremap <Leader>/ :Ack<Space>
+
+" NERDTree: Space+n toggles the tree; Space+f reveals the current file.
+nnoremap <silent> <Leader>n :NERDTreeToggle<CR>
+nnoremap <silent> <Leader>f :NERDTreeFind<CR>
+
+" Keep both upstream NERDTree behaviors, registered once even after :source.
+augroup VimrcNERDTree
+    autocmd!
+    " Quit if the only remaining window in the last tab is the file tree.
+    autocmd BufEnter * if tabpagenr('$') == 1 && winnr('$') == 1 && exists('b:NERDTree') && b:NERDTree.isTabTree() | call feedkeys(":quit\<CR>:\<BS>") | endif
+    " If a file replaces the left-hand tree, restore the tree and move the file.
+    autocmd BufEnter * if winnr() == winnr('h') && bufname('#') =~ 'NERD_tree_\d\+' && bufname('%') !~ 'NERD_tree_\d\+' && winnr('$') > 1 | call <SID>RestoreNERDTree() | endif
+augroup END
+
+function! s:RestoreNERDTree() abort
+    let l:buffer = bufnr('%')
+    buffer #
+    wincmd w
+    execute 'buffer ' . l:buffer
+endfunction
+
+" EasyMotion: s + two characters + a label jumps across windows.
+" <Plug> mappings intentionally use recursive mapping commands.
+let g:EasyMotion_do_mapping = 0
+let g:EasyMotion_smartcase = 1
+let g:EasyMotion_startofline = 0
+nmap s <Plug>(easymotion-overwin-f2)
+map <Leader>l <Plug>(easymotion-lineforward)
+map <Leader>j <Plug>(easymotion-j)
+map <Leader>k <Plug>(easymotion-k)
+map <Leader>h <Plug>(easymotion-linebackward)
+
+" Visual/operator motions stay in the buffer; normal motions cross windows.
+map <Leader>L <Plug>(easymotion-bd-jk)
+nmap <Leader>L <Plug>(easymotion-overwin-line)
+map <Leader>w <Plug>(easymotion-bd-w)
+nmap <Leader>w <Plug>(easymotion-overwin-w)
+
+" NERDCommenter: retain your comment formatting and default mappings.
+let g:NERDCreateDefaultMappings = 1
+let g:NERDSpaceDelims = 1
+let g:NERDCompactSexyComs = 1
+let g:NERDDefaultAlign = 'left'
+let g:NERDAltDelims_java = 1
+let g:NERDCustomDelimiters = {'c': {'left': '/**', 'right': '*/'}}
+let g:NERDCommentEmptyLines = 1
+let g:NERDTrimTrailingWhitespace = 1
+let g:NERDToggleCheckAllLines = 1
+
+" Prefer the synced wrapper; the existing v0.66.1 wrapper requires fzf >= 0.53.
+" Missing/older binaries use CtrlP without prompting to download anything.
+let s:fzf_ready = 0
+if executable('fzf')
+    let s:fzf_version = matchstr(system(shellescape(exepath('fzf')) . ' --version'), '^\d\+\.\d\+')
+    let s:fzf_numbers = map(split(s:fzf_version, '\.'), 'str2nr(v:val)')
+    let s:fzf_ready = v:shell_error == 0 && len(s:fzf_numbers) >= 2
+        \ && (s:fzf_numbers[0] > 0 || s:fzf_numbers[1] >= 53)
+endif
+let s:fzf_dirs = [expand('~/.vim/pack/vendor/opt/fzf'), expand('~/.fzf')]
+if !empty($HOMEBREW_PREFIX)
+    call add(s:fzf_dirs, $HOMEBREW_PREFIX . '/opt/fzf')
+endif
+if executable('fzf')
+    call add(s:fzf_dirs, fnamemodify(resolve(exepath('fzf')), ':h:h'))
+endif
+let s:fzf_wrapper_found = 0
+if s:fzf_ready
+    for s:fzf_dir in s:fzf_dirs
+        if filereadable(s:fzf_dir . '/plugin/fzf.vim')
+            if index(split(&runtimepath, ','), s:fzf_dir) < 0
+                let &runtimepath .= ',' . escape(s:fzf_dir, ',')
+            endif
+            let s:fzf_wrapper_found = 1
+            break
+        endif
+    endfor
+endif
+unlet! s:fzf_dir s:fzf_dirs s:fzf_version s:fzf_numbers
+if s:fzf_wrapper_found
+    nnoremap <silent> <Leader>p :FZF<CR>
+else
+    nnoremap <silent> <Leader>p :CtrlP<CR>
+endif
+
+function! s:BuildQuickfixList(lines) abort
+    if empty(a:lines)
+        return
+    endif
+    call setqflist([], ' ', {'title': 'fzf files', 'items': map(copy(a:lines), '{"filename": v:val, "lnum": 1}')})
+    copen
+    cfirst
+endfunction
+
+" fzf: centered popup; Ctrl+Q sends selected files to quickfix.
+let g:fzf_action = {
+    \ 'ctrl-q': function('s:BuildQuickfixList'),
+    \ 'ctrl-t': 'tab split',
+    \ 'ctrl-x': 'split',
+    \ 'ctrl-v': 'vsplit'}
+if has('popupwin') && has('patch-8.2.191')
+    let g:fzf_layout = {'window': {'width': 0.9, 'height': 0.6}}
+else
+    let g:fzf_layout = {'down': '~40%'}
+endif
+let g:fzf_history_dir = expand('~/.local/share/fzf-history')
+
+" Machine-specific overrides, deliberately outside chezmoi and Git.
+if filereadable(expand('~/.vimrc.local'))
+    execute 'source ' . fnameescape(expand('~/.vimrc.local'))
+endif
+
+" WakaTime's plugin is shared; its credentials, binary, and activity stay local.
+" Avoid automatic CLI downloads or API-key prompts on an unconfigured machine.
+let s:wakatime_home = empty($WAKATIME_HOME) ? expand('~') : expand($WAKATIME_HOME)
+if !exists('g:wakatime_CLIPath')
+    if executable('wakatime-cli')
+        let g:wakatime_CLIPath = exepath('wakatime-cli')
+    elseif executable(s:wakatime_home . '/.wakatime/wakatime-cli')
+        let g:wakatime_CLIPath = s:wakatime_home . '/.wakatime/wakatime-cli'
+    elseif executable('wakatime') && exepath('wakatime') !~# '\%(npm\|node\)'
+        let g:wakatime_CLIPath = exepath('wakatime')
+    endif
+endif
+if !exists('g:wakatime_CLIPath') || !executable(g:wakatime_CLIPath)
+    \ || (!filereadable(s:wakatime_home . '/.wakatime.cfg') && empty($WAKATIME_API_KEY))
+    let g:loaded_wakatime = 1
+endif
+unlet s:wakatime_home

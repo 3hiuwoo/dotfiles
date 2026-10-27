@@ -1,0 +1,202 @@
+# Shared environment ----------------------------------------------------------
+[[ -r "$HOME/env.sh" ]] && source "$HOME/env.sh"
+typeset -U path fpath
+
+if [[ -n ${HOMEBREW_PREFIX:-} && -d "$HOMEBREW_PREFIX/opt/llvm/bin" ]]; then
+    path=("$HOMEBREW_PREFIX/opt/llvm/bin" "${path[@]}")
+fi
+
+# Python environments ---------------------------------------------------------
+# Base auto-activation is disabled in .condarc. CONDA_HOME can be set locally.
+() {
+    local conda_root
+    for conda_root in "${CONDA_HOME:-}" "${CONDA_EXE:+${CONDA_EXE:h:h}}" \
+        "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/anaconda3"; do
+        [[ -n $conda_root && -r "$conda_root/etc/profile.d/conda.sh" ]] || continue
+        source "$conda_root/etc/profile.d/conda.sh"
+        [[ -r "$conda_root/etc/profile.d/mamba.sh" ]] && source "$conda_root/etc/profile.d/mamba.sh"
+        break
+    done
+}
+
+# History is local; use the same defaults even without a system /etc/zshrc.
+HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
+HISTSIZE=2000
+SAVEHIST=1000
+
+# Completion ------------------------------------------------------------------
+# Register existing completion directories before initializing completion once.
+() {
+    local completion_dir
+    local -a completion_dirs
+    for completion_dir in "$HOME/.zsh/completions" {{ if eq .chezmoi.os "darwin" }}"$HOME/.grok/completions/zsh" {{ end }}\
+        "$HOME/.zsh/plugins/zsh-completions/src" \
+        "${HOMEBREW_PREFIX:+$HOMEBREW_PREFIX/share/zsh-completions}"; do
+        [[ -d $completion_dir ]] && completion_dirs+=("$completion_dir")
+    done
+    if [[ $OSTYPE == darwin* && -d "$HOME/.zsh/plugins/macos" ]]; then
+        completion_dirs+=("$HOME/.zsh/plugins/macos")
+    fi
+    fpath=("${completion_dirs[@]}" "${fpath[@]}")
+}
+autoload -Uz compinit
+compinit
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+
+# Bun and Node ----------------------------------------------------------------
+[[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
+[[ -d "$BUN_INSTALL/bin" ]] && path=("$BUN_INSTALL/bin" "${path[@]}")
+[[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+[[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
+
+# FZF bindings require a version that supports --zsh.
+if (( $+commands[fzf] )); then
+    source <(fzf --zsh 2>/dev/null)
+fi
+
+# Private environment ---------------------------------------------------------
+[[ -r "$HOME/.secrets" ]] && source "$HOME/.secrets"
+
+# Aliases ---------------------------------------------------------------------
+if (( $+commands[eza] )); then
+    alias ls="eza --icons=auto -a"
+    alias tree="ls --tree"
+    alias ll="ls -alh --git"
+else
+    alias ll="ls -alh"
+fi
+
+() {
+    local bat_command
+    if (( $+commands[bat] )); then
+        bat_command=bat
+    elif (( $+commands[batcat] )); then
+        bat_command=batcat
+        alias bat=batcat
+    else
+        return
+    fi
+    alias cat="$bat_command --paging=never"
+    if (( $+commands[fzf] )); then
+        alias fzf="fzf --preview \"$bat_command --color=always --style=numbers --line-range=:500 {}\""
+    fi
+    alias -g -- --help="--help 2>&1 | $bat_command --language=help --style=plain"
+    # Leave -h untouched: many commands use it for ordinary non-help options.
+}
+
+(( $+commands[batman] )) && alias man="batman"
+(( $+commands[lazygit] )) && alias lg="lazygit"
+alias g="git"
+alias gs="git status"
+alias gc="git commit"
+{{ if eq .chezmoi.os "darwin" -}}
+(( $+commands[claude] )) && alias cc="claude --dangerously-skip-permissions"
+(( $+commands[codex] )) && alias cx="codex --yolo"
+(( $+commands[kiro-cli] )) && alias kc="kiro-cli --v3"
+(( $+commands[agy] )) && alias ag="agy --dangerously-skip-permissions"
+{{ end -}}
+if (( $+commands[uv] )); then
+    alias pip="uv pip"
+    alias ut="uv tool"
+fi
+{{ if eq .chezmoi.os "darwin" -}}
+(( $+commands[bunx] )) && alias ccusage="bunx ccusage"
+{{ end }}
+if [[ $OSTYPE == darwin* ]]; then
+    alias cppcompile='c++ -std=c++11 -stdlib=libc++'
+    if [[ -x /Applications/LibreOffice.app/Contents/MacOS/soffice ]]; then
+        alias soffice="/Applications/LibreOffice.app/Contents/MacOS/soffice"
+    fi
+else
+    alias cppcompile='c++ -std=c++11'
+fi
+
+alias mv="mv -i"
+alias mkdir="mkdir -p"
+alias df="df -h"
+
+# Functions -------------------------------------------------------------------
+function y() {
+    local tmp="$(mktemp "${TMPDIR:-/tmp}/yazi-cwd.XXXXXX")" cwd
+    [[ -n $tmp ]] || return 1
+    command yazi "$@" --cwd-file="$tmp"
+    IFS= read -r -d '' cwd < "$tmp"
+    [[ $cwd != "$PWD" && -d $cwd ]] && builtin cd -- "$cwd"
+    command rm -f -- "$tmp"
+}
+
+function mkcd() { mkdir -p "$@" && cd "$_"; }
+
+function open_command() {
+    if [[ -n ${BROWSER:-} && $1 == (http|https)://* ]]; then
+        "$BROWSER" "$@"
+    elif [[ $OSTYPE == darwin* ]]; then
+        command open "$@" &>/dev/null
+    elif (( $+commands[xdg-open] )); then
+        command xdg-open "$@" &>/dev/null
+    else
+        print -u2 'No desktop opener is available; set BROWSER for web links.'
+        return 127
+    fi
+}
+
+# Plugins and prompt ----------------------------------------------------------
+# Plugin sources are pinned in .chezmoiexternal.toml; generated caches stay local.
+if [[ -r "$HOME/.zsh/fsh/fast-syntax-highlighting.plugin.zsh" ]]; then
+    typeset -g FAST_WORK_DIR=${FAST_WORK_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/fsh}
+    if [[ ! -e "$FAST_WORK_DIR/secondary_theme.zsh" ]]; then
+        command mkdir -p -- "$FAST_WORK_DIR"
+        command cp -- "$HOME/.zsh/fsh/share/free_theme.zsh" "$FAST_WORK_DIR/secondary_theme.zsh"
+    fi
+    source "$HOME/.zsh/fsh/fast-syntax-highlighting.plugin.zsh"
+    if [[ -r "$XDG_CONFIG_HOME/fsh/catppuccin-mocha.ini" && \
+        ( ! -r "$FAST_WORK_DIR/current_theme.zsh" || \
+          "$XDG_CONFIG_HOME/fsh/catppuccin-mocha.ini" -nt "$FAST_WORK_DIR/current_theme.zsh" ) ]]; then
+        fast-theme -q "$XDG_CONFIG_HOME/fsh/catppuccin-mocha.ini"
+    fi
+fi
+[[ -r "$HOME/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
+    source "$HOME/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+[[ -r "$HOME/.zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]] && \
+    source "$HOME/.zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh"
+
+(( $+commands[starship] )) && eval "$(starship init zsh)"
+
+if [[ $OSTYPE == darwin* && -r "$HOME/.zsh/plugins/macos/macos.plugin.zsh" ]]; then
+    path=("$HOME/.zsh/plugins/macos" "${path[@]}")
+    source "$HOME/.zsh/plugins/macos/macos.plugin.zsh"
+fi
+
+# Keybindings -----------------------------------------------------------------
+bindkey -v
+if (( $+widgets[history-substring-search-up] )); then
+    bindkey '^[[A' history-substring-search-up
+    bindkey '^[[B' history-substring-search-down
+    bindkey -M vicmd 'k' history-substring-search-up
+    bindkey -M vicmd 'j' history-substring-search-down
+fi
+bindkey '^A' beginning-of-line
+bindkey '^E' end-of-line
+bindkey '^[b' backward-word
+bindkey '^[f' forward-word
+bindkey -M viins '^[^?' backward-kill-word
+bindkey -M viins '^[d' kill-word
+bindkey '^k' kill-line
+bindkey -M vicmd '^R' redo
+
+# Navigation and CLI integration ----------------------------------------------
+(( $+commands[zoxide] )) && eval "$(zoxide init zsh --cmd cd)"
+
+# Keep personal commands ahead of initialized runtime paths.
+path=("$HOME/.local/bin" "${path[@]}")
+{{ if eq .chezmoi.os "darwin" -}}
+[[ -d "$HOME/.grok/bin" ]] && path=("$HOME/.grok/bin" "${path[@]}")
+if (( $+commands[ccs] )) && [[ -r "$HOME/.zsh/ccs-init.zsh" ]]; then
+    source "$HOME/.zsh/ccs-init.zsh"
+fi
+[[ -d "$HOME/.qoder-cn/entry" ]] && path=("$HOME/.qoder-cn/entry" "${path[@]}")
+{{ end }}
+# Machine-specific interactive overrides are deliberately not synced.
+if [[ -r "$HOME/.zshrc.local" ]]; then
+    source "$HOME/.zshrc.local"
+fi

@@ -1,0 +1,22 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- $content := .chezmoi.stdin | replaceAllRegex "(?ms)^# >>> chezmoi Bash >>>\n.*?^# <<< chezmoi Bash <<<\n?" "" -}}
+{{- if eq (trim $content) "" -}}
+# Keep Bash's previous login-file fallback when creating a new .bash_profile.
+if [ -r "$HOME/.bash_login" ]; then
+    . "$HOME/.bash_login"
+elif [ -r "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+fi
+{{ else -}}
+{{ $content }}{{ if not (hasSuffix "\n" $content) }}{{ "\n" }}{{ end -}}
+{{ end -}}
+# >>> chezmoi Bash >>>
+# Load interactive configuration once, including when .profile already did so.
+case $- in
+    *i*)
+        if [ "${_CHEZMOI_BASHRC_LOADED:-}" != "$$" ] && [ -r "$HOME/.bashrc" ]; then
+            . "$HOME/.bashrc"
+        fi
+        ;;
+esac
+# <<< chezmoi Bash <<<

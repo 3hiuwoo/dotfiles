@@ -1,0 +1,39 @@
+[user]
+	name = Sun Xiaoyu
+	email = yinuo42@outlook.com
+[core]
+	excludesfile = ~/.gitignore
+	editor = vim
+	pager = delta
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[init]
+	defaultBranch = main
+[interactive]
+    diffFilter = delta --color-only
+[http]
+	postBuffer = 20000000
+{{ if eq .chezmoi.os "darwin" }}
+[credential]
+	helper = osxkeychain
+{{ end }}
+[include]
+    path = ~/.config/delta/themes/catppuccin.gitconfig
+[delta]
+    navigate = true  # use n and N to move between diff sections
+    line-numbers = true
+    hyperlinks = true
+    hyperlinks-file-link-format = "vscode://file/{path}:{line}"
+    features = catppuccin-mocha
+    side-by-side = true
+[merge]
+    conflictStyle = zdiff3
+[mergetool]
+	keepBackup = false
+
+# Host-specific trust, credentials, and identity overrides stay local.
+[include]
+    path = ~/.gitconfig.local

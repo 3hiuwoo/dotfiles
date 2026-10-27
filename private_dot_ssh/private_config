@@ -1,0 +1,37 @@
+# Machine-specific overrides are optional and take precedence for scalar options.
+Include ~/.ssh/config.local
+
+Host miaa-hpc1
+  HostName 202.38.247.156
+  Port 22
+  User sunxy
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+
+Host miaa-lab
+  HostName 183.6.76.206
+  Port 6565
+  User sunxy
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+
+Host miaa-hpc2
+  HostName 202.38.247.56
+  Port 22
+  User sunxy
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+
+Host miaa-sxy
+  HostName 10.32.191.187
+  Port 22
+  User sunxy
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+
+Host xiaoyudedmit
+  HostName 179.253.255.1
+  Port 22
+  User root
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes

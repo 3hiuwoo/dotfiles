@@ -1,0 +1,24 @@
+{
+  "allowAnyShortcut": true,
+  "almostMaximize": {
+    "keyCode": 36,
+    "modifierFlags": 917504
+  },
+  "alternateDefaultShortcuts": true,
+  "centerHalf": {
+    "keyCode": 45,
+    "modifierFlags": 786432
+  },
+  "footprintAnimationDurationMultiplier": 0.75,
+  "hapticFeedbackOnSnap": 1,
+  "reflowTodo": {
+    "keyCode": 45,
+    "modifierFlags": 786432
+  },
+  "skipGapTopEdge": false,
+  "subsequentExecutionMode": 1,
+  "toggleTodo": {
+    "keyCode": 11,
+    "modifierFlags": 786432
+  }
+}

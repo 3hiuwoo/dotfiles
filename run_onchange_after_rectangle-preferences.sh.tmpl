@@ -1,0 +1,13 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/sh
+set -eu
+
+# Preferences SHA-256: {{ include "dot_config/rectangle/preferences.json" | sha256sum }}
+# Write selected keys through macOS preferences, preserving unrelated app state.
+domain=com.knollsoft.Rectangle
+preferences={{ joinPath .chezmoi.homeDir ".config/rectangle/preferences.json" | quote }}
+for key in {{ range $key, $_ := (include "dot_config/rectangle/preferences.json" | fromJson) }}{{ $key | quote }} {{ end }}; do
+    value=$(/usr/bin/plutil -extract "$key" xml1 -o - "$preferences")
+    /usr/bin/defaults write "$domain" "$key" "$value"
+done
+{{ end -}}

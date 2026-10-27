@@ -1,0 +1,39 @@
+# Follow upstream default branches; refresh cached downloads daily on apply.
+# exact=false preserves any existing local Git metadata or extra files.
+
+[".zsh/fsh"]
+    type = "archive"
+    url = "https://codeload.github.com/zdharma-continuum/fast-syntax-highlighting/tar.gz/refs/heads/master"
+    refreshPeriod = "24h"
+    stripComponents = 1
+    exact = false
+    exclude = ["*/.github/**", "*/images/**", "*/test/**", "*/tests/**"]
+
+[".zsh/plugins/zsh-autosuggestions"]
+    type = "archive"
+    url = "https://codeload.github.com/zsh-users/zsh-autosuggestions/tar.gz/refs/heads/master"
+    refreshPeriod = "24h"
+    stripComponents = 1
+    exact = false
+    include = ["*/zsh-autosuggestions.zsh", "*/LICENSE"]
+
+[".zsh/plugins/zsh-history-substring-search"]
+    type = "archive"
+    url = "https://codeload.github.com/zsh-users/zsh-history-substring-search/tar.gz/refs/heads/master"
+    refreshPeriod = "24h"
+    stripComponents = 1
+    exact = false
+    include = ["*/zsh-history-substring-search.zsh", "*/LICENSE"]
+
+[".zsh/completions/_eza"]
+    type = "file"
+    url = "https://raw.githubusercontent.com/eza-community/eza/main/completions/zsh/_eza"
+    refreshPeriod = "24h"
+
+[".zsh/plugins/zsh-completions"]
+    type = "archive"
+    url = "https://codeload.github.com/zsh-users/zsh-completions/tar.gz/refs/heads/master"
+    refreshPeriod = "24h"
+    stripComponents = 1
+    exact = false
+    include = ["*/src/**", "*/LICENSE"]

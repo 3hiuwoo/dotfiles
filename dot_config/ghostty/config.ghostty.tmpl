@@ -1,0 +1,29 @@
+font-size = 16
+font-thicken = true
+theme = dark:Catppuccin Mocha,light:Catppuccin Latte
+shell-integration-features = no-cursor,sudo,ssh-env,ssh-terminfo
+cursor-style = block
+background-opacity = 0.7
+{{ if eq .chezmoi.os "darwin" }}
+background-blur = macos-glass-regular
+{{ end }}
+{{ if eq .chezmoi.os "darwin" }}
+macos-option-as-alt = true
+{{ end }}
+confirm-close-surface = false
+window-height = 24
+window-width = 80
+window-inherit-working-directory = false
+tab-inherit-working-directory = false
+
+{{ if eq .chezmoi.os "darwin" }}
+keybind = global:cmd+opt+t=toggle_quick_terminal
+{{ end }}
+keybind = cmd+opt+h=goto_split:left
+keybind = cmd+opt+j=goto_split:down
+keybind = cmd+opt+k=goto_split:up
+keybind = cmd+opt+l=goto_split:right
+
+{{ if eq .chezmoi.os "darwin" }}
+macos-hidden = always
+{{ end }}

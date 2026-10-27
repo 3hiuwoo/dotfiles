@@ -1,0 +1,124 @@
+# Repository documentation is not a home-directory dotfile.
+README.md
+tests
+tests/**
+
+# Credentials, per-machine overrides, history, and generated caches stay local.
+# Skills CLI owns these installations and its mutable registry. Chezmoi owns
+# only AGENTS.md and the separate repository links under .agents.
+.agents/.skill-lock.json
+.claude/skills
+.claude/skills/**
+.claude.json
+{{ range .agent_skills.sources }}{{ range .skills }}
+.agents/skills/{{ . }}
+.agents/skills/{{ . }}/**
+{{ end }}{{ end }}
+.secrets
+.secrets/**
+.shpotify.cfg
+.zshenv.local
+.zprofile.local
+.zshrc.local
+.bashrc.local
+.bash_history
+.bash_sessions
+.bash_sessions/**
+env.local.sh
+.vimrc.local
+.viminfo
+.vim/.netrwhist
+.vim/undo
+.vim/undo/**
+.vim/swap
+.vim/swap/**
+.vim/backup
+.vim/backup/**
+.vim/pack/**/.git
+.vim/pack/**/.git/**
+.vim/pack/**/doc/tags
+.wakatime.cfg
+.wakatime
+.wakatime/**
+.local/share/fzf-history
+.local/share/fzf-history/**
+**/*.swp
+**/*.swo
+**/*~
+.zsh_history
+.zcompdump*
+.cache/**
+**/*.zwc
+**/.DS_Store
+
+{{ if ne .chezmoi.os "darwin" }}
+# Shared agent instructions/skills and client preferences are Mac-only.
+.agents
+.agents/**
+.claude
+.claude/**
+.claude.json
+.codex
+.codex/**
+.config/ccstatusline
+.config/ccstatusline/**
+install-agent-skills.sh
+# Desktop applications and workstation-only CLI configuration stay on Macs.
+.config/ghostty
+.config/ghostty/**
+.config/zed
+.config/zed/**
+.config/gh
+.config/gh/**
+.config/lazygit
+.config/lazygit/**
+.config/yazi
+.config/yazi/**
+.config/starship.toml
+install-packages-darwin.sh
+rectangle-preferences.sh
+# Agent wrappers and generated completions are only used on Macs.
+.grok
+.grok/**
+.zsh/ccs-init.zsh
+.zsh/completions/_ccs
+# Finder, AppleScript, Music, and Spotify helpers only apply to macOS.
+.zsh/plugins/macos
+.zsh/plugins/macos/**
+# Rectangle preferences are macOS-only.
+.config/rectangle
+.config/rectangle/**
+{{ end }}
+
+{{ if ne .chezmoi.os "linux" }}
+install-packages-linux.sh
+.bashrc
+.bash_profile
+{{ end }}
+
+{{ if eq .chezmoi.os "linux" }}
+# Bash is the Linux shell; zsh configuration and external plugins are Mac-only.
+.zshenv
+.zprofile
+.zshrc
+.zsh
+.zsh/**
+.config/fsh
+.config/fsh/**
+{{ end }}
+
+# Local inputs and Zed prompt databases are not portable configuration.
+.gitconfig.local
+.config/zed/chezmoi-local.json
+.config/zed/prompts
+.config/zed/prompts/**
+
+# SSH aliases and GitHub CLI preferences are managed; authentication stays local.
+.ssh/config.local
+.ssh/id_*
+.ssh/known_hosts*
+.ssh/authorized_keys*
+.ssh/agent
+.ssh/agent/**
+.config/gh/hosts.yml
+.config/gh/hosts.yaml
