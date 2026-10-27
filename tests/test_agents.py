@@ -86,9 +86,9 @@ target.mkdir(parents=True, exist_ok=True)
         ]
 
     def apply(self, platform="darwin", success=True, install=False):
-        options = ["apply", "--force"]
-        if not install:
-            options.append("--exclude=scripts")
+        # Plugin clones need the network; these tests cover files and scripts.
+        excluded = "externals" if install else "scripts,externals"
+        options = ["apply", "--force", f"--exclude={excluded}"]
         result = subprocess.run(
             self.base(platform) + options, env=self.env,
             capture_output=True, text=True, timeout=30,

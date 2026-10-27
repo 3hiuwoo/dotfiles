@@ -12,15 +12,16 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "buffer_font_fallbacks": ["FiraCode Nerd Font Mono"],
   "cli_default_open_behavior": "existing_window",
   "context_servers": {
     "mcp-server-context7": {
       "enabled": {{ if get $local "context7_api_key" }}true{{ else }}false{{ end }},
       "remote": false,
       "settings": {
-        "context7_api_key": {{ get $local "context7_api_key" | default "" | toJson }}
-      }
-    }
+        "context7_api_key": {{ get $local "context7_api_key" | default "" | toJson }},
+      },
+    },
   },
   "diagnostics": {
     "inline": {
@@ -109,17 +110,17 @@
   },
   "agent_servers": {
     "qoder": {
-      "type": "registry"
+      "type": "registry",
     },
     "antigravity-acp": {
-      "type": "registry"
+      "type": "registry",
     },
     "cursor": {
       "type": "registry",
     },
     "github-copilot-cli": {
       "default_config_options": {
-        "allow_all": "on"
+        "allow_all": "on",
       },
       "type": "registry",
     },

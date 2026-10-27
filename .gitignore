@@ -27,8 +27,6 @@ dot_vim/dot_netrwhist
 dot_vim/undo/
 dot_vim/swap/
 dot_vim/backup/
-dot_vim/pack/**/.git/
-dot_vim/pack/**/doc/tags
 .wakatime.cfg
 dot_wakatime*
 private_dot_wakatime*
@@ -55,7 +53,7 @@ dot_config/zed/prompts/
 # Agent account/runtime state must never be captured into the source tree.
 # .claude.json stays local; settings.json uses a selective modify template.
 *dot_agents/*skill-lock.json*
-*dot_agents/skills/*/
+*dot_agents/skills/
 *dot_claude/skills/
 dot_claude.json*
 private_dot_claude.json*

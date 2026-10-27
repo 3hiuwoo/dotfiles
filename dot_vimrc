@@ -213,35 +213,26 @@ let g:NERDCommentEmptyLines = 1
 let g:NERDTrimTrailingWhitespace = 1
 let g:NERDToggleCheckAllLines = 1
 
-" Prefer the synced wrapper; the existing v0.66.1 wrapper requires fzf >= 0.53.
-" Missing/older binaries use CtrlP without prompting to download anything.
-let s:fzf_ready = 0
-if executable('fzf')
-    let s:fzf_version = matchstr(system(shellescape(exepath('fzf')) . ' --version'), '^\d\+\.\d\+')
-    let s:fzf_numbers = map(split(s:fzf_version, '\.'), 'str2nr(v:val)')
-    let s:fzf_ready = v:shell_error == 0 && len(s:fzf_numbers) >= 2
-        \ && (s:fzf_numbers[0] > 0 || s:fzf_numbers[1] >= 53)
-endif
-let s:fzf_dirs = [expand('~/.vim/pack/vendor/opt/fzf'), expand('~/.fzf')]
-if !empty($HOMEBREW_PREFIX)
-    call add(s:fzf_dirs, $HOMEBREW_PREFIX . '/opt/fzf')
-endif
+" fzf's README: add the Vim wrapper shipped with the installed fzf to
+" runtimepath, so the wrapper always matches the binary. Homebrew and ~/.fzf
+" keep it beside bin/; Debian/Ubuntu ship it under /usr/share/doc.
+" Without fzf, use CtrlP without prompting to download anything.
+let s:fzf_dirs = []
 if executable('fzf')
     call add(s:fzf_dirs, fnamemodify(resolve(exepath('fzf')), ':h:h'))
+    call add(s:fzf_dirs, '/usr/share/doc/fzf/examples')
 endif
 let s:fzf_wrapper_found = 0
-if s:fzf_ready
-    for s:fzf_dir in s:fzf_dirs
-        if filereadable(s:fzf_dir . '/plugin/fzf.vim')
-            if index(split(&runtimepath, ','), s:fzf_dir) < 0
-                let &runtimepath .= ',' . escape(s:fzf_dir, ',')
-            endif
-            let s:fzf_wrapper_found = 1
-            break
+for s:fzf_dir in s:fzf_dirs
+    if filereadable(s:fzf_dir . '/plugin/fzf.vim')
+        if index(split(&runtimepath, ','), s:fzf_dir) < 0
+            let &runtimepath .= ',' . escape(s:fzf_dir, ',')
         endif
-    endfor
-endif
-unlet! s:fzf_dir s:fzf_dirs s:fzf_version s:fzf_numbers
+        let s:fzf_wrapper_found = 1
+        break
+    endif
+endfor
+unlet! s:fzf_dir s:fzf_dirs
 if s:fzf_wrapper_found
     nnoremap <silent> <Leader>p :FZF<CR>
 else

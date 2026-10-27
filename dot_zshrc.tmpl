@@ -30,8 +30,7 @@ SAVEHIST=1000
     local completion_dir
     local -a completion_dirs
     for completion_dir in "$HOME/.zsh/completions" {{ if eq .chezmoi.os "darwin" }}"$HOME/.grok/completions/zsh" {{ end }}\
-        "$HOME/.zsh/plugins/zsh-completions/src" \
-        "${HOMEBREW_PREFIX:+$HOMEBREW_PREFIX/share/zsh-completions}"; do
+        "$HOME/.zsh/plugins/zsh-completions/src"; do
         [[ -d $completion_dir ]] && completion_dirs+=("$completion_dir")
     done
     if [[ $OSTYPE == darwin* && -d "$HOME/.zsh/plugins/macos" ]]; then
@@ -141,7 +140,7 @@ function open_command() {
 }
 
 # Plugins and prompt ----------------------------------------------------------
-# Plugin sources are pinned in .chezmoiexternal.toml; generated caches stay local.
+# Plugins are Git clones managed by .chezmoiexternal.toml; caches stay local.
 if [[ -r "$HOME/.zsh/fsh/fast-syntax-highlighting.plugin.zsh" ]]; then
     typeset -g FAST_WORK_DIR=${FAST_WORK_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/fsh}
     if [[ ! -e "$FAST_WORK_DIR/secondary_theme.zsh" ]]; then

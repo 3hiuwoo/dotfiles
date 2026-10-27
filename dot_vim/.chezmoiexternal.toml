@@ -1,91 +1,63 @@
-# Follow upstream default branches; refresh cached downloads daily on apply.
-# Installed plugin files are owned by chezmoi externals.
-# Preserve existing Git checkouts and locally generated files.
+# Each plugin's README recommends cloning it into a Vim 8 package directory.
+# chezmoi clones missing plugins and fast-forwards them at most daily; local
+# commits or edits stop the pull instead of being overwritten.
 
 ["pack/vendor/start/ack"]
-    type = "archive"
-    url = "https://codeload.github.com/mileszs/ack.vim/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/mileszs/ack.vim.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/catppuccin"]
-    type = "archive"
-    url = "https://codeload.github.com/catppuccin/vim/tar.gz/refs/heads/main"
+    type = "git-repo"
+    url = "https://github.com/catppuccin/vim.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/ctrlp"]
-    type = "archive"
-    url = "https://codeload.github.com/ctrlpvim/ctrlp.vim/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/ctrlpvim/ctrlp.vim.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/lightline"]
-    type = "archive"
-    url = "https://codeload.github.com/itchyny/lightline.vim/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/itchyny/lightline.vim"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/nerdcommenter"]
-    type = "archive"
-    url = "https://codeload.github.com/preservim/nerdcommenter/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/preservim/nerdcommenter.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/nerdtree"]
-    type = "archive"
-    url = "https://codeload.github.com/preservim/nerdtree/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/preservim/nerdtree.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/repeat"]
-    type = "archive"
-    url = "https://codeload.github.com/tpope/vim-repeat/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://tpope.io/vim/repeat.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/surround"]
-    type = "archive"
-    url = "https://codeload.github.com/tpope/vim-surround/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://tpope.io/vim/surround.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/vim-easymotion"]
-    type = "archive"
-    url = "https://codeload.github.com/easymotion/vim-easymotion/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/easymotion/vim-easymotion.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
+    pull.args = ["--ff-only"]
 
 ["pack/vendor/start/vim-wakatime"]
-    type = "archive"
-    url = "https://codeload.github.com/wakatime/vim-wakatime/tar.gz/refs/heads/master"
+    type = "git-repo"
+    url = "https://github.com/wakatime/vim-wakatime.git"
     refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    exclude = ["*/.github/**", "*/test/**", "*/tests/**", "*/screenshots/**", "*/images/**"]
-
-["pack/vendor/opt/fzf"]
-    type = "archive"
-    url = "https://codeload.github.com/junegunn/fzf/tar.gz/refs/heads/master"
-    refreshPeriod = "24h"
-    stripComponents = 1
-    exact = false
-    include = ["*/plugin/**", "*/LICENSE"]
+    pull.args = ["--ff-only"]

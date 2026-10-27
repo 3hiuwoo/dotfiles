@@ -1,0 +1,81 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/sh
+set -eu
+
+# Runs on every apply but only acts on missing commands, so a failed install
+# is retried next time. Failures are reported without interrupting the apply:
+# file synchronization never depends on a download succeeding.
+# Existing installations are accepted regardless of their origin; nothing is
+# upgraded here. Each tool keeps its own update command.
+{{ template "command-path.sh" . }}
+{{ template "official-installer.sh" . }}
+failed=''
+note_failure() {
+    failed="$failed $1"
+    printf 'Could not install %s; continuing. It will be retried on the next apply.\n' "$1" >&2
+}
+
+# Homebrew first: it also supplies git/curl for the installers below.
+set --
+{{ range .packages.darwin.brews -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    set -- "$@" {{ .name | quote }}
+fi
+{{ end -}}
+if [ "$#" -gt 0 ]; then
+    brew_command=$(command -v brew || true)
+    for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+        [ -z "$brew_command" ] && [ -x "$candidate" ] && brew_command=$candidate
+    done
+    if [ -z "$brew_command" ]; then
+        if run_official_installer homebrew \
+            https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh /bin/bash \
+            NONINTERACTIVE=1; then
+            for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+                [ -z "$brew_command" ] && [ -x "$candidate" ] && brew_command=$candidate
+            done
+        fi
+    fi
+    if [ -n "$brew_command" ]; then
+        eval "$("$brew_command" shellenv)"
+        export HOMEBREW_NO_AUTO_UPDATE=1
+        export HOMEBREW_NO_INSTALL_UPGRADE=1
+        export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+        printf 'Installing missing terminal packages with Homebrew: %s\n' "$*"
+        printf 'brew "%s"\n' "$@" | "$brew_command" bundle --no-upgrade --file=- \
+            || note_failure "Homebrew packages ($*)"
+    else
+        note_failure "Homebrew"
+    fi
+fi
+
+# Official website installers.
+{{ range .packages.darwin.scripts -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    run_official_installer {{ .name | quote }} {{ .url | quote }} {{ .shell | quote }}{{ range .env }} {{ . | quote }}{{ end }} \
+        || note_failure {{ .name | quote }}
+fi
+{{ end -}}
+
+# Node.js through nvm, as recommended by nodejs.org. PROFILE=/dev/null keeps
+# nvm from editing rc files; the managed shells already load it.
+if ! commands_available node npm npx; then
+    nvm_dir=${NVM_DIR:-$HOME/.nvm}
+    if [ ! -s "$nvm_dir/nvm.sh" ]; then
+        run_official_installer nvm {{ .packages.darwin.nvm.url | quote }} bash PROFILE=/dev/null \
+            || note_failure nvm
+    fi
+    if [ -s "$nvm_dir/nvm.sh" ]; then
+        # nvm.sh is not written for `set -eu`.
+        if ! (set +eu; export NVM_DIR="$nvm_dir"; . "$nvm_dir/nvm.sh" \
+            && nvm install --lts && nvm alias default 'lts/*'); then
+            note_failure node
+        fi
+    fi
+fi
+
+if [ -n "$failed" ]; then
+    printf 'Package setup incomplete:%s\n' "$failed" >&2
+fi
+exit 0
+{{ end -}}

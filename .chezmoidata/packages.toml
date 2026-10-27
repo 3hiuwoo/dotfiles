@@ -1,55 +1,146 @@
 # Terminal dependencies. Existing commands satisfy these requirements regardless
-# of whether they came from a website installer, a version manager, or the OS.
-# Package managers are fallbacks for missing commands. No desktop apps or fonts.
+# of how they were installed. Only missing commands are installed. No desktop
+# apps or fonts. Agent CLIs are limited to the Mac `scripts` list below.
 
 [packages.darwin]
 brews = [
+    { name = "ack", commands = ["ack"] },
     { name = "bat", commands = ["bat"] },
     { name = "bat-extras", commands = ["batman"] },
+    { name = "chezmoi", commands = ["chezmoi"] },
+    { name = "coreutils", commands = ["gtimeout"] },
     { name = "curl", commands = ["curl"] },
     { name = "eza", commands = ["eza"] },
     { name = "fd", commands = ["fd"] },
+    { name = "ffmpeg", commands = ["ffmpeg"] },
     { name = "fzf", commands = ["fzf"] },
     { name = "gh", commands = ["gh"] },
     { name = "git", commands = ["git"] },
     { name = "git-delta", commands = ["delta"] },
     { name = "git-lfs", commands = ["git-lfs"] },
+    { name = "glow", commands = ["glow"] },
+    { name = "go", commands = ["go"] },
     { name = "htop", commands = ["htop"] },
+    { name = "imagemagick", commands = ["magick"] },
     { name = "jq", commands = ["jq"] },
     { name = "lazygit", commands = ["lazygit"] },
-    { name = "node", commands = ["node", "npm", "npx"] },
+    { name = "mosh", commands = ["mosh"] },
+    { name = "pandoc", commands = ["pandoc"] },
+    { name = "pkgconf", commands = ["pkgconf"] },
+    { name = "poppler", commands = ["pdftotext"] },
+    { name = "resvg", commands = ["resvg"] },
     { name = "ripgrep", commands = ["rg"] },
     { name = "rsync", commands = ["rsync"] },
+    { name = "sevenzip", commands = ["7zz"] },
     { name = "starship", commands = ["starship"] },
+    { name = "taplo", commands = ["taplo"] },
+    { name = "tldr", commands = ["tldr"] },
     { name = "tmux", commands = ["tmux"] },
-    { name = "uv", commands = ["uv"] },
+    { name = "tree", commands = ["tree"] },
     { name = "vim", commands = ["vim"] },
+    { name = "wget", commands = ["wget"] },
     { name = "yazi", commands = ["yazi"] },
     { name = "zoxide", commands = ["zoxide"] },
     { name = "zsh", commands = ["zsh"] },
 ]
 
-# The configured research servers use Ubuntu and Bash. Keep their login shell.
+# Official website installers, run only when every listed command is missing.
+# `shell` runs the downloaded script; `env` is passed to it. SHELL=/bin/sh is
+# always set so installers that edit rc files leave the managed dotfiles alone.
+[[packages.darwin.scripts]]
+name = "uv"
+commands = ["uv", "uvx"]
+url = "https://astral.sh/uv/install.sh"
+shell = "sh"
+env = ["UV_NO_MODIFY_PATH=1"]
+
+[[packages.darwin.scripts]]
+name = "bun"
+commands = ["bun"]
+url = "https://bun.com/install"
+shell = "bash"
+env = []
+
+[[packages.darwin.scripts]]
+name = "claude"
+commands = ["claude"]
+url = "https://claude.ai/install.sh"
+shell = "bash"
+env = []
+
+[[packages.darwin.scripts]]
+name = "codex"
+commands = ["codex"]
+url = "https://chatgpt.com/codex/install.sh"
+shell = "sh"
+env = ["CODEX_NON_INTERACTIVE=1"]
+
+[[packages.darwin.scripts]]
+name = "grok"
+commands = ["grok"]
+url = "https://x.ai/cli/install.sh"
+shell = "bash"
+env = []
+
+[[packages.darwin.scripts]]
+name = "antigravity"
+commands = ["agy"]
+url = "https://antigravity.google/cli/install.sh"
+shell = "bash"
+env = []
+
+# Node comes from nvm's official installer, then `nvm install --lts`.
+[packages.darwin.nvm]
+url = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh"
+
+# Ubuntu/Debian. Installed only with root or sudo; otherwise skipped entirely.
+# Packages absent from the release's archive (e.g. starship on 24.04) are
+# skipped. Empty `commands` checks the dpkg package instead of a command.
 [packages.linux]
 apt = [
+    { name = "ack", commands = ["ack"] },
     { name = "bash", commands = ["bash"] },
-    # Bash completion is sourced data rather than a standalone command.
     { name = "bash-completion", commands = [] },
     { name = "bat", commands = ["bat"] },
     { name = "build-essential", commands = ["cc", "c++", "make"] },
-    # Certificate data has no command to probe; check its native package instead.
     { name = "ca-certificates", commands = [] },
     { name = "curl", commands = ["curl"] },
+    { name = "eza", commands = ["eza"] },
+    { name = "fd-find", commands = ["fd"] },
+    { name = "ffmpeg", commands = ["ffmpeg"] },
+    { name = "fzf", commands = ["fzf"] },
+    { name = "gh", commands = ["gh"] },
     { name = "git", commands = ["git"] },
     { name = "git-delta", commands = ["delta"] },
     { name = "git-lfs", commands = ["git-lfs"] },
+    { name = "glow", commands = ["glow"] },
+    { name = "golang-go", commands = ["go"] },
     { name = "htop", commands = ["htop"] },
+    { name = "imagemagick", commands = [] },
     { name = "jq", commands = ["jq"] },
+    { name = "lazygit", commands = ["lazygit"] },
     { name = "less", commands = ["less"] },
+    { name = "mosh", commands = ["mosh"] },
     { name = "openssh-client", commands = ["ssh", "scp", "sftp"] },
+    { name = "pandoc", commands = ["pandoc"] },
+    { name = "pkgconf", commands = ["pkgconf"] },
+    { name = "poppler-utils", commands = ["pdftotext"] },
     { name = "ripgrep", commands = ["rg"] },
     { name = "rsync", commands = ["rsync"] },
+    { name = "starship", commands = ["starship"] },
+    { name = "tealdeer", commands = ["tldr"] },
     { name = "tmux", commands = ["tmux"] },
+    { name = "tree", commands = ["tree"] },
     { name = "unzip", commands = ["unzip"] },
     { name = "vim", commands = ["vim"] },
+    { name = "wget", commands = ["wget"] },
+    { name = "zoxide", commands = ["zoxide"] },
 ]
+
+# Official installers for tools without an apt package; also admin-only, global.
+[[packages.linux.scripts]]
+name = "uv"
+commands = ["uv", "uvx"]
+url = "https://astral.sh/uv/install.sh"
+shell = "sh"
+env = ["UV_INSTALL_DIR=/usr/local/bin", "UV_NO_MODIFY_PATH=1"]

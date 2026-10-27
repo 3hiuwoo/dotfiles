@@ -41,9 +41,10 @@ class BashTests(unittest.TestCase):
             }}),
         ]
 
+    # Plugin clones need the network; these tests cover the rc files.
     def apply(self, platform="linux"):
         result = subprocess.run(
-            self.base(platform) + ["apply", "--exclude=scripts", "--force"],
+            self.base(platform) + ["apply", "--exclude=scripts,externals", "--force"],
             capture_output=True, text=True, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

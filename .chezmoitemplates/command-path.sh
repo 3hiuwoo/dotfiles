@@ -15,6 +15,9 @@ commands_available() {
         if [ "$tool_command" = bat ] && command -v batcat >/dev/null 2>&1; then
             continue
         fi
+        if [ "$tool_command" = fd ] && command -v fdfind >/dev/null 2>&1; then
+            continue
+        fi
         command -v "$tool_command" >/dev/null 2>&1 || return 1
     done
 }

@@ -1,0 +1,101 @@
+{{ if eq .chezmoi.os "linux" -}}
+#!/bin/sh
+set -eu
+
+# Debian/Ubuntu. Packages are installed globally and only with administrator
+# rights: as root, through passwordless sudo, or through sudo after a single
+# password prompt when you are in an admin group and a terminal is attached.
+# Without them this machine is not yours to provision, so installation is
+# skipped entirely and only configuration files are applied.
+# Runs on every apply but only acts on missing commands. Failures are reported
+# without interrupting the apply. Never changes the login shell or upgrades.
+{{ template "command-path.sh" . }}
+{{ template "official-installer.sh" . }}
+if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
+    printf '%s\n' 'Skipping package installation: only Debian/Ubuntu (apt) is supported.' >&2
+    exit 0
+fi
+
+set --
+{{ range .packages.linux.apt -}}
+{{ if .commands -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+{{ else -}}
+if [ "$(dpkg-query -W -f='${Status}' {{ .name | quote }} 2>/dev/null || true)" != 'install ok installed' ]; then
+{{ end -}}
+    set -- "$@" {{ .name | quote }}
+fi
+{{ end -}}
+missing_scripts=''
+{{ range .packages.linux.scripts -}}
+commands_available{{ range .commands }} {{ . | quote }}{{ end }} \
+    || missing_scripts="$missing_scripts {{ .name }}"
+{{ end -}}
+if [ "$#" -eq 0 ] && [ -z "$missing_scripts" ]; then
+    exit 0
+fi
+
+in_admin_group() {
+    for group in $(id -Gn 2>/dev/null); do
+        case $group in sudo|admin|wheel) return 0 ;; esac
+    done
+    return 1
+}
+
+if [ "$(id -u)" -eq 0 ]; then
+    as_root() { "$@"; }
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    as_root() { sudo "$@"; }
+elif command -v sudo >/dev/null 2>&1 && in_admin_group \
+    && (: </dev/tty) 2>/dev/null && sudo -v </dev/tty; then
+    as_root() { sudo "$@"; }
+else
+    printf '%s\n' 'Skipping package installation: no administrator rights on this machine.'
+    exit 0
+fi
+
+failed=''
+note_failure() {
+    failed="$failed $1"
+    printf 'Could not install %s; continuing. It will be retried on the next apply.\n' "$1" >&2
+}
+
+if [ "$#" -gt 0 ]; then
+    if as_root apt-get update; then
+        # Skip packages this release does not carry (e.g. starship before 26.04).
+        available=''
+        unavailable=''
+        for package do
+            if apt-cache show --no-all-versions "$package" >/dev/null 2>&1; then
+                available="$available $package"
+            else
+                unavailable="$unavailable $package"
+            fi
+        done
+        [ -z "$unavailable" ] || printf 'Not in this release'"'"'s apt archive, skipped:%s\n' "$unavailable"
+        if [ -n "$available" ]; then
+            # Package names come from the reviewed manifest; no glob characters.
+            set -f
+            # shellcheck disable=SC2086
+            as_root env DEBIAN_FRONTEND=noninteractive \
+                apt-get install -y --no-install-recommends --no-upgrade $available \
+                || note_failure "apt packages ($available )"
+            set +f
+        fi
+    else
+        note_failure "apt package index"
+    fi
+fi
+
+{{ range .packages.linux.scripts -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    run_official_installer as_root {{ .name | quote }} {{ .url | quote }} {{ .shell | quote }}{{ range .env }} {{ . | quote }}{{ end }} \
+        || note_failure {{ .name | quote }}
+fi
+{{ end -}}
+
+if [ -n "$failed" ]; then
+    printf 'Package setup incomplete:%s\n' "$failed" >&2
+fi
+exit 0
+{{ end -}}
