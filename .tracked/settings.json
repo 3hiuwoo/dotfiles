@@ -1,8 +1,3 @@
-{{- $local := dict -}}
-{{- $localPath := joinPath .chezmoi.homeDir ".config/zed/chezmoi-local.json" -}}
-{{- if stat $localPath -}}
-{{- $local = fromJson (include $localPath) -}}
-{{- end -}}
 // Zed settings
 //
 // For information on how to configure Zed, see the Zed
@@ -16,11 +11,12 @@
   "cli_default_open_behavior": "existing_window",
   "context_servers": {
     "mcp-server-context7": {
-      "enabled": {{ if get $local "context7_api_key" }}true{{ else }}false{{ end }},
-      "remote": false,
-      "settings": {
-        "context7_api_key": {{ get $local "context7_api_key" | default "" | toJson }},
-      },
+      "enabled": true,
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "exec uv run --no-project --python 3.12 --script \"$HOME/.config/zed/context7-mcp.py\"",
+      ],
     },
   },
   "diagnostics": {
@@ -62,8 +58,8 @@
   "proxy": "",
   "terminal": {
     "copy_on_select": true,
-{{ if eq .chezmoi.os "darwin" }}    "option_as_meta": true,
-{{ end }}    "font_fallbacks": ["FiraCode Nerd Font Mono"],
+    "option_as_meta": true,
+    "font_fallbacks": ["FiraCode Nerd Font Mono"],
   },
   "tabs": {
     "show_diagnostics": "errors",
@@ -125,9 +121,18 @@
       "type": "registry",
     },
     "codex-acp": {
+      "default_config_options": {
+        "fast-mode": false,
+        "reasoning_effort": "high",
+        "model": "gpt-6.1-sol"
+      },
       "type": "registry",
     },
     "claude-acp": {
+      "default_config_options": {
+        "mode": "bypassPermissions",
+        "effort": "max"
+      },
       "type": "registry",
     },
   },

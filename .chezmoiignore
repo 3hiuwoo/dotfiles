@@ -39,6 +39,7 @@ __pycache__
 .config/cmux
 .config/zed
 .config/rectangle
+.ssh/config
 # Yazi has no apt package for Linux.
 .config/yazi
 install-packages-darwin.sh

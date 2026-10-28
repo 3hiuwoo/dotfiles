@@ -23,7 +23,7 @@ Host miaa-hpc2
   IdentitiesOnly yes
 
 Host miaa-sxy
-  HostName 10.32.191.187
+  HostName 10.32.169.37
   Port 22
   User sunxy
   IdentityFile ~/.ssh/id_ed25519

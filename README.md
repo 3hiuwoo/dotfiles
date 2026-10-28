@@ -34,6 +34,15 @@ files holding secrets (see [Local files](#local-files-never-synced)).
 4. Mac: install desktop apps yourself, then log in to the agent
    CLIs. If Zed needs Context7, create its key file (see below).
 
+For now, transfer the existing SSH private key securely and manually when
+setting up a new Mac. Some servers restrict adding public keys, so reuse the
+authorized key where needed. Keep private keys outside the dotfiles repo;
+set `~/.ssh` to mode `700` and private-key files to `600`.
+
+- [ ] Revisit encrypted SSH-key backup and restoration through chezmoi if
+  managing more Macs makes manual setup inconvenient. Deferred for now:
+  manual transfer is sufficient for the small number of Macs in use.
+
 ## Tools
 
 Edit **`.chezmoidata/packages.toml`** for ordinary tools. NVIDIA driver
@@ -161,24 +170,31 @@ stops `chezmoi add` from copying keys or credentials into the source.
 | `~/.secrets` | Sourced by zsh if present |
 | `~/.config/zed/chezmoi-local.json` | Zed's Context7 key (below) |
 
-Zed's Context7 key lives outside the repo:
+Zed's settings are symlinked to `.tracked/settings.json`, so GUI edits update
+the source directly. Context7 uses a launcher that reads its API key from a
+local file and passes it through the server's environment. The key stays
+outside the repo:
 
 ```sh
 printf '{ "context7_api_key": "YOUR_KEY" }\n' > ~/.config/zed/chezmoi-local.json
 chmod 600 ~/.config/zed/chezmoi-local.json
-chezmoi apply ~/.config/zed/settings.json
 ```
 
-Don't `chezmoi add` the rendered Zed settings: they contain the key.
+Restart the Context7 MCP server in Zed after changing the key. Without a local
+key or `CONTEXT7_API_KEY` environment variable, Context7 runs anonymously with
+lower limits. The launcher uses uv/Python and npx, and pins Context7 to 4.4.4.
+Do not enter credentials into the symlinked settings file.
 
 ## Settings changed from an app's GUI
 
-chezmoi syncs one way, from the repo to the machine. An app that edits its own
-settings file doesn't update the repo, and the next apply may undo the change.
+For regular managed files, chezmoi syncs from the repo to the machine; an app's
+edits do not update the source, and the next apply may undo them. Symlinked
+files such as Zed's settings point directly into the repo instead.
 
 | Config | What happens to GUI edits |
 | --- | --- |
-| Zed, Ghostty, cmux, ccstatusline, other whole files | Overwritten on apply. Copy the change into the source (`chezmoi edit FILE`) to keep it. |
+| Zed | Symlinked to `.tracked/settings.json`; GUI edits update the source directly. Keep credentials in the local file above. |
+| Ghostty, cmux, ccstatusline, other whole files | Overwritten on apply. Copy the change into the source (`chezmoi edit FILE`) to keep it. |
 | Claude `settings.json` | Merged: keys in the shared template win, other local keys survive. |
 | Rectangle | Only the selected keys are written, and only when the shared JSON changes. |
 | `~/.claude.json`, Codex `config.toml` | Not managed; apps own them. |
