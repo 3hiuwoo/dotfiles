@@ -12,11 +12,7 @@
   "context_servers": {
     "mcp-server-context7": {
       "enabled": true,
-      "command": "/bin/sh",
-      "args": [
-        "-c",
-        "exec uv run --no-project --python 3.12 --script \"$HOME/.config/zed/context7-mcp.py\"",
-      ],
+      "remote": false,
     },
   },
   "diagnostics": {
@@ -44,10 +40,10 @@
       },
     },
     "default_model": {
-      "provider": "openai-subscribed",
-      "model": "gpt-6.1-sol",
+      "provider": "zed.dev",
+      "model": "claude-sonnet-5-5",
       "enable_thinking": true,
-      "effort": "medium",
+      "effort": "high",
     },
     "favorite_models": [],
     "single_file_review": true,

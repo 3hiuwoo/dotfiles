@@ -32,7 +32,7 @@ files holding secrets (see [Local files](#local-files-never-synced)).
 3. Linux: if the old `.bashrc` had host-specific lines, move them to
    `~/.bashrc.local` first. The managed `.bashrc` replaces the whole file.
 4. Mac: install desktop apps yourself, then log in to the agent
-   CLIs. If Zed needs Context7, create its key file (see below).
+   CLIs. If Zed needs Context7, export its key in `~/.secrets` (see below).
 
 For now, transfer the existing SSH private key securely and manually when
 setting up a new Mac. Some servers restrict adding public keys, so reuse the
@@ -167,23 +167,24 @@ stops `chezmoi add` from copying keys or credentials into the source.
 | `~/.vimrc.local` | Vim overrides |
 | `~/.gitconfig.local` | Git identity, `safe.directory`, credential helper |
 | `~/.ssh/config.local` | Extra SSH settings, read before the shared aliases |
-| `~/.secrets` | Sourced by zsh if present |
-| `~/.config/zed/chezmoi-local.json` | Zed's Context7 key (below) |
+| `~/.secrets` | Sourced by zsh if present; includes the Context7 environment variable |
 
 Zed's settings are symlinked to `.tracked/settings.json`, so GUI edits update
-the source directly. Context7 uses a launcher that reads its API key from a
-local file and passes it through the server's environment. The key stays
-outside the repo:
+the source directly. The Context7 extension manages installing and launching
+the MCP server. Leave `settings.context7_api_key` unset so the server reads
+`CONTEXT7_API_KEY` from its environment instead. In your local `~/.secrets`, add:
 
 ```sh
-printf '{ "context7_api_key": "YOUR_KEY" }\n' > ~/.config/zed/chezmoi-local.json
-chmod 600 ~/.config/zed/chezmoi-local.json
+export CONTEXT7_API_KEY='YOUR_KEY'
 ```
 
-Restart the Context7 MCP server in Zed after changing the key. Without a local
-key or `CONTEXT7_API_KEY` environment variable, Context7 runs anonymously with
-lower limits. The launcher uses uv/Python and npx, and pins Context7 to 4.4.4.
-Do not enter credentials into the symlinked settings file.
+Keep `~/.secrets` at mode `600`. Open a new shell and fully quit/relaunch Zed
+after changing the key. Zed inherits the shell environment when opened from
+the CLI, or loads a login-shell environment when opened from the Dock.
+Without the variable, Context7 runs anonymously with lower limits. A literal
+`"$CONTEXT7_API_KEY"` in settings is not expanded; omit that setting entirely.
+Do not enter credentials into the symlinked settings file. The previous
+`~/.config/zed/chezmoi-local.json` file is no longer used.
 
 ## Settings changed from an app's GUI
 
@@ -193,7 +194,7 @@ files such as Zed's settings point directly into the repo instead.
 
 | Config | What happens to GUI edits |
 | --- | --- |
-| Zed | Symlinked to `.tracked/settings.json`; GUI edits update the source directly. Keep credentials in the local file above. |
+| Zed | Symlinked to `.tracked/settings.json`; GUI edits update the source directly. Keep credentials in `~/.secrets`. |
 | Ghostty, cmux, ccstatusline, other whole files | Overwritten on apply. Copy the change into the source (`chezmoi edit FILE`) to keep it. |
 | Claude `settings.json` | Merged: keys in the shared template win, other local keys survive. |
 | Rectangle | Only the selected keys are written, and only when the shared JSON changes. |
