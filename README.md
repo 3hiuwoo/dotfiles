@@ -6,7 +6,7 @@ servers. The OS is detected automatically; there is nothing to choose.
 | | macOS | Linux |
 | --- | --- | --- |
 | Shell | zsh | Bash (login shell is never changed) |
-| Config synced | Everything below | Shell, Git/Delta, Vim, Bat/Eza themes, gh, Lazygit, Starship, uv, Conda, SSH aliases |
+| Config synced | Everything below | Shell, Git/Delta, Vim, Bat/Eza themes, gh, Lazygit, uv, Conda, SSH aliases |
 | Tools installed | Missing ones only (Homebrew + official installers) | Install missing tools, then upgrade apt packages after applying files; **admin rights required** |
 | Agents (Claude, Codex, skills) | Yes | No |
 | Desktop apps (Ghostty, cmux, Zed, Rectangle, Yazi) | Config only; install the apps yourself | No |
@@ -54,11 +54,17 @@ is skipped, however it was installed. Adding a tool is one line:
 { name = "btop", commands = ["btop"] },        # inside brews = [ ... ] or apt = [ ... ]
 ```
 
-Comment out an entry to stop installing that tool on new machines. This does
-not uninstall an existing copy or stop its settings from syncing. The final
-Linux apt upgrade still updates all installed apt packages, including tools
-whose entries are commented out. Use apt holds or repository pinning when a
-particular installed package needs to stay on its current version.
+Commented-out entries are excluded from installation. Their tool-specific
+settings should also be excluded in `.chezmoiignore`. Among the currently
+disabled tools, only Starship has a dedicated managed config: its config and
+shell initialization automatically follow the active package list. Starship
+is enabled on macOS and disabled on Linux, where Bash uses its built-in prompt.
+The other commented-out tools have no dedicated managed config in this repo.
+
+Ignoring a config preserves an existing local copy; it does not delete it or
+uninstall the tool. The final Linux apt upgrade still updates all installed
+apt packages, including tools whose entries are commented out. Use apt holds
+or repository pinning when an installed package needs to stay on its current version.
 
 How installation behaves:
 
@@ -76,7 +82,7 @@ How installation behaves:
 - **Linux needs admin rights:** root, passwordless sudo, or the `sudo` group with
   a terminal to type the password into. Without them nothing is installed, so
   servers that aren't yours stay untouched. Packages a release doesn't carry
-  (e.g. `starship` on Ubuntu 24.04) are skipped.
+  are skipped.
 
 The Linux order is: install dependencies (including an initial NVIDIA driver),
 apply files and other after actions, upgrade apt packages, then report reboot
@@ -220,12 +226,12 @@ If help tags go missing, run `:helptags ALL` in Vim.
 | Source | Target |
 | --- | --- |
 | `dot_zshrc.tmpl`, `dot_zshenv.tmpl`, `dot_zprofile.tmpl`, `dot_zsh/` | zsh (Mac) |
-| `dot_bashrc`, `modify_dot_bash_profile` | Bash (Linux); the profile keeps existing content and only adds a hook that loads `.bashrc` |
+| `dot_bashrc.tmpl`, `modify_dot_bash_profile` | Bash (Linux); the profile keeps existing content and only adds a hook that loads `.bashrc` |
 | `env.sh` | Environment shared by both shells |
 | `dot_condarc` | Conda (no auto-activated base) |
 | `dot_vimrc`, `dot_vim/` | Vim |
 | `dot_gitconfig.tmpl`, `dot_gitignore`, `dot_config/git`, `dot_config/delta` | Git and Delta |
-| `dot_config/*` | bat, cmux, eza, fsh, ghostty, gh (`private_gh`), lazygit, rectangle, starship, uv, yazi, zed, ccstatusline |
+| `dot_config/*` | bat, cmux, eza, fsh, ghostty, gh (`private_gh`), lazygit, rectangle, uv, yazi, zed, ccstatusline; Starship only where enabled in the package list (currently macOS) |
 | `private_dot_ssh/private_config` | SSH aliases |
 | `dot_agents/`, `private_dot_claude/`, `private_dot_codex/`, `dot_grok/` | Agent instructions, Claude settings merge, Grok completions |
 | `.chezmoiexternal.toml`, `dot_vim/.chezmoiexternal.toml` | Plugin clones |

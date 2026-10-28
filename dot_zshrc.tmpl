@@ -159,7 +159,13 @@ fi
 [[ -r "$HOME/.zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]] && \
     source "$HOME/.zsh/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh"
 
+{{ $starshipEnabled := false -}}
+{{ range .packages.darwin.brews -}}
+{{ if eq .name "starship" }}{{ $starshipEnabled = true }}{{ end -}}
+{{ end -}}
+{{ if $starshipEnabled -}}
 (( $+commands[starship] )) && eval "$(starship init zsh)"
+{{ end -}}
 
 if [[ $OSTYPE == darwin* && -r "$HOME/.zsh/plugins/macos/macos.plugin.zsh" ]]; then
     path=("$HOME/.zsh/plugins/macos" "${path[@]}")

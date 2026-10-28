@@ -32,19 +32,21 @@ class BashTests(unittest.TestCase):
             "TERM": "xterm-256color", "LANG": "en_US.UTF-8",
         }
 
-    def base(self, platform="linux"):
+    def base(self, platform="linux", package_names=None):
+        data = {"chezmoi": {"os": platform, "homeDir": str(self.home)}}
+        if package_names is not None:
+            kind = "brews" if platform == "darwin" else "apt"
+            data["packages"] = {platform: {kind: [{"name": name} for name in package_names]}}
         return [
             CHEZMOI, "--source", str(SOURCE), "--destination", str(self.home),
             "--persistent-state", str(self.root / "state"), "--no-tty",
-            "--override-data", json.dumps({"chezmoi": {
-                "os": platform, "homeDir": str(self.home),
-            }}),
+            "--override-data", json.dumps(data),
         ]
 
     # Plugin clones need the network; these tests cover the rc files.
-    def apply(self, platform="linux"):
+    def apply(self, platform="linux", package_names=None):
         result = subprocess.run(
-            self.base(platform) + ["apply", "--exclude=scripts,externals", "--force"],
+            self.base(platform, package_names) + ["apply", "--exclude=scripts,externals", "--force"],
             capture_output=True, text=True, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -107,6 +109,40 @@ class BashTests(unittest.TestCase):
         self.apply("darwin")
         for name in [".bashrc", ".bash_profile"]:
             self.assertEqual((self.home / name).read_text(), f"# local Mac {name}\n")
+
+    def test_disabled_starship_preserves_local_config_and_uses_bash_prompt(self):
+        config = self.home / ".config/starship.toml"
+        config.parent.mkdir()
+        config.write_text("# machine-local Starship settings\n")
+        self.stub("starship", "printf 'export AUDIT_STARSHIP=initialized\\n'")
+        self.apply()
+        self.assertEqual(config.read_text(), "# machine-local Starship settings\n")
+        managed = subprocess.check_output(self.base() + ["managed", "--include=files"], text=True)
+        self.assertNotIn(".config/starship.toml", managed.splitlines())
+        output = self.interactive(
+            '[[ -z ${AUDIT_STARSHIP:-} ]] || exit 1; printf "BASH_PROMPT_OK\\n"'
+        )
+        self.assertIn("BASH_PROMPT_OK", output)
+
+    def test_enabling_starship_syncs_config_and_initializes_bash(self):
+        self.stub("starship", "printf 'export AUDIT_STARSHIP=initialized\\n'")
+        self.apply(package_names=["starship"])
+        self.assertTrue((self.home / ".config/starship.toml").is_file())
+        output = self.interactive(
+            '[[ $AUDIT_STARSHIP == initialized ]] || exit 1; printf "STARSHIP_OK\\n"'
+        )
+        self.assertIn("STARSHIP_OK", output)
+
+    def test_macos_starship_config_follows_its_own_package_list(self):
+        for names, expected in [(["starship"], True), ([], False)]:
+            with self.subTest(names=names):
+                base = self.base("darwin", package_names=names)
+                files = subprocess.check_output(base + ["managed", "--include=files"], text=True)
+                self.assertEqual(".config/starship.toml" in files.splitlines(), expected)
+                zshrc = subprocess.check_output(base + [
+                    "execute-template", "--file", str(SOURCE / "dot_zshrc.tmpl"),
+                ], text=True)
+                self.assertEqual("starship init zsh" in zshrc, expected)
 
     def test_noninteractive_startup_is_silent_and_has_no_side_effects(self):
         self.apply()

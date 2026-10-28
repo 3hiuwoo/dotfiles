@@ -6,6 +6,21 @@
 README.md
 tests
 
+# Starship configuration follows the active package list for this OS.
+{{ $starshipEnabled := false -}}
+{{ if eq .chezmoi.os "darwin" -}}
+{{ range .packages.darwin.brews -}}
+{{ if eq .name "starship" }}{{ $starshipEnabled = true }}{{ end -}}
+{{ end -}}
+{{ else if eq .chezmoi.os "linux" -}}
+{{ range .packages.linux.apt -}}
+{{ if eq .name "starship" }}{{ $starshipEnabled = true }}{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ if not $starshipEnabled }}
+.config/starship.toml
+{{ end }}
+
 # Local Python/uv development state is never a home-directory dotfile.
 .venv
 .uv-cache
