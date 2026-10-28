@@ -17,7 +17,7 @@ servers. The OS is detected automatically; there is nothing to choose.
 chezmoi edit ~/.zshrc        # edit the source copy of a file
 chezmoi diff                 # preview what apply would change
 chezmoi apply                # install missing tools, apply files; Linux admins also upgrade apt packages
-chezmoi apply -x scripts     # apply files only, no installers
+chezmoi apply -x scripts     # apply files only; skip installation and upgrades
 chezmoi apply -R             # also refresh downloaded plugins now
 cd ~/.local/share/chezmoi    # the source repo; commit here
 ```
@@ -53,6 +53,12 @@ is skipped, however it was installed. Adding a tool is one line:
 ```toml
 { name = "btop", commands = ["btop"] },        # inside brews = [ ... ] or apt = [ ... ]
 ```
+
+Comment out an entry to stop installing that tool on new machines. This does
+not uninstall an existing copy or stop its settings from syncing. The final
+Linux apt upgrade still updates all installed apt packages, including tools
+whose entries are commented out. Use apt holds or repository pinning when a
+particular installed package needs to stay on its current version.
 
 How installation behaves:
 
@@ -126,6 +132,12 @@ still receive their normal package upgrades. After rebooting, run `chezmoi apply
 again to verify.
 
 ## Local files (never synced)
+
+`.chezmoiignore` controls deployment to the home directory; `.gitignore`
+controls which local files Git leaves untracked. Repository documentation,
+tests, and local Python/uv caches are excluded from deployment. The virtual
+environment (`.venv/`), uv cache (`.uv-cache/`), pytest cache (`.pytest_cache/`),
+and Python bytecode stay local and are not committed.
 
 Create these when a machine needs its own settings. They are not in the source
 state, so chezmoi never touches them; `.gitignore` keeps them out of commits.
@@ -219,6 +231,7 @@ If help tags go missing, run `:helptags ALL` in Vim.
 | `.chezmoiexternal.toml`, `dot_vim/.chezmoiexternal.toml` | Plugin clones |
 | `.chezmoidata/`, `.chezmoitemplates/` | Package and skill manifests; shared script snippets |
 | `.chezmoiignore` | What each OS skips |
+| `.gitignore` | Local overrides, credentials, and development artifacts excluded from Git |
 | `run_before_install-packages-*.sh.tmpl` | Tool installers |
 | `run_after_zz_upgrade-packages-linux.sh.tmpl` | Required final apt upgrade and manual reboot handoff (Linux admins) |
 | `run_after_install-agent-skills.sh.tmpl` | Skill installer and Claude links |

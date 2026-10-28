@@ -1,10 +1,17 @@
-# Only paths that exist in the source state belong here. Ignoring a directory
-# also ignores the files chezmoi keeps in its source state, but not files
-# supplied by .chezmoiexternal.toml: those need `dir/**`.
+# Target paths excluded from deployment. Ignoring a directory also ignores
+# files chezmoi keeps in its source state, but not files supplied by
+# .chezmoiexternal.toml: those need `dir/**`.
 
 # Repository documentation is not a home-directory dotfile.
 README.md
 tests
+
+# Local Python/uv development state is never a home-directory dotfile.
+.venv
+.uv-cache
+.pytest_cache
+__pycache__
+**/__pycache__
 
 {{ if ne .chezmoi.os "darwin" }}
 # Agent configuration and desktop applications are Mac-only.
@@ -25,6 +32,7 @@ rectangle-preferences.sh
 {{ end }}
 
 {{ if ne .chezmoi.os "linux" }}
+# Bash startup and both Linux provisioning stages are Linux-only.
 install-packages-linux.sh
 zz_upgrade-packages-linux.sh
 .bashrc

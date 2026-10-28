@@ -3,6 +3,10 @@
 **/.DS_Store
 *.zwc
 __pycache__/
+# Local Python/uv environments and test caches in this source checkout.
+/.venv/
+/.uv-cache/
+/.pytest_cache/
 .secrets
 dot_secrets*
 private_dot_secrets*
