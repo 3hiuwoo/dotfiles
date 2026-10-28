@@ -8,9 +8,12 @@ set -eu
 # Without them this machine is not yours to provision, so installation is
 # skipped entirely and only configuration files are applied.
 # Runs on every apply but only acts on missing commands. Failures are reported
-# without interrupting the apply. Never changes the login shell or upgrades.
+# without interrupting the apply. Never changes the login shell or upgrades
+# ordinary tools here. The required apt upgrade runs after dotfiles are applied.
 {{ template "command-path.sh" . }}
+{{ template "linux-admin.sh" . }}
 {{ template "official-installer.sh" . }}
+{{ template "nvidia.sh" . }}
 if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
     printf '%s\n' 'Skipping package installation: only Debian/Ubuntu (apt) is supported.' >&2
     exit 0
@@ -31,25 +34,16 @@ missing_scripts=''
 commands_available{{ range .commands }} {{ . | quote }}{{ end }} \
     || missing_scripts="$missing_scripts {{ .name }}"
 {{ end -}}
-if [ "$#" -eq 0 ] && [ -z "$missing_scripts" ]; then
+nvidia_pci=$(nvidia_gpu_addresses)
+nvidia_pending=0
+if [ -n "$nvidia_pci" ] && ! nvidia_healthy; then
+    nvidia_pending=1
+fi
+if [ "$#" -eq 0 ] && [ -z "$missing_scripts" ] && [ "$nvidia_pending" -eq 0 ]; then
     exit 0
 fi
 
-in_admin_group() {
-    for group in $(id -Gn 2>/dev/null); do
-        case $group in sudo|admin|wheel) return 0 ;; esac
-    done
-    return 1
-}
-
-if [ "$(id -u)" -eq 0 ]; then
-    as_root() { "$@"; }
-elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    as_root() { sudo "$@"; }
-elif command -v sudo >/dev/null 2>&1 && in_admin_group \
-    && (: </dev/tty) 2>/dev/null && sudo -v </dev/tty; then
-    as_root() { sudo "$@"; }
-else
+if ! acquire_admin; then
     printf '%s\n' 'Skipping package installation: no administrator rights on this machine.'
     exit 0
 fi
@@ -77,7 +71,7 @@ if [ "$#" -gt 0 ]; then
             # Package names come from the reviewed manifest; no glob characters.
             set -f
             # shellcheck disable=SC2086
-            as_root env DEBIAN_FRONTEND=noninteractive \
+            as_root env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l \
                 apt-get install -y --no-install-recommends --no-upgrade $available \
                 || note_failure "apt packages ($available )"
             set +f
@@ -93,6 +87,10 @@ if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
         || note_failure {{ .name | quote }}
 fi
 {{ end -}}
+
+if [ "$nvidia_pending" -eq 1 ]; then
+    configure_nvidia || note_failure 'NVIDIA driver setup'
+fi
 
 if [ -n "$failed" ]; then
     printf 'Package setup incomplete:%s\n' "$failed" >&2

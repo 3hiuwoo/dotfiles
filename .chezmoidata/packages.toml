@@ -121,6 +121,7 @@ apt = [
     { name = "lazygit", commands = ["lazygit"] },
     { name = "less", commands = ["less"] },
     { name = "mosh", commands = ["mosh"] },
+    { name = "nvitop", commands = ["nvitop"] },
     { name = "openssh-client", commands = ["ssh", "scp", "sftp"] },
     { name = "pandoc", commands = ["pandoc"] },
     { name = "pkgconf", commands = ["pkgconf"] },

@@ -26,6 +26,7 @@ rectangle-preferences.sh
 
 {{ if ne .chezmoi.os "linux" }}
 install-packages-linux.sh
+zz_upgrade-packages-linux.sh
 .bashrc
 .bash_profile
 {{ end }}

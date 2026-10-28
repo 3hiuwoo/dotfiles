@@ -27,6 +27,8 @@ class ProvisioningTests(unittest.TestCase):
         self.home.mkdir()
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        self.pci = self.root / "pci"
+        self.pci.mkdir()
         self.log = self.root / "calls"
         self.env = {
             "HOME": str(self.home),
@@ -38,6 +40,10 @@ class ProvisioningTests(unittest.TestCase):
             "AUDIT_GROUPS": "users",
             "AUDIT_SUDO_NOPASS": "1",
             "AUDIT_APT_MISSING": "",
+            "AUDIT_NVIDIA_INSTALLED": "0",
+            "AUDIT_ARCH": "amd64",
+            "AUDIT_BIN": str(self.bin),
+            "TMPDIR": str(self.root),
         }
         self.stub("brew", '''case "$1" in
 shellenv) exit 0 ;;
@@ -51,12 +57,56 @@ esac''')
 -Gn) printf "%s\n" "$AUDIT_GROUPS" ;;
 *) exit 1 ;;
 esac''')
-        self.stub("dpkg-query", '''if [ "$AUDIT_CERT_INSTALLED" = 1 ]; then
+        self.stub("dpkg-query", '''case "$*" in
+*cuda-keyring*)
+    [ -f "$AUDIT_LOG.keyring-installed" ] && printf 'install ok installed'
+    exit 0 ;;
+*nvidia-driver-*)
+    if [ "$AUDIT_NVIDIA_INSTALLED" = 1 ] || [ -f "$AUDIT_LOG.driver-installed" ]; then
+        printf '%s nvidia-dkms-open\n' "${AUDIT_NVIDIA_STATUS:-ii}"
+    fi
+    exit 0 ;;
+*nvidia-dkms-open*)
+    if [ "$AUDIT_NVIDIA_INSTALLED" = 1 ] || [ -f "$AUDIT_LOG.driver-installed" ]; then
+        printf 'install ok installed %s\n' "${AUDIT_DRIVER_VERSION:-615.71.10-1ubuntu1}"
+    fi
+    exit 0 ;;
+esac
+if [ "$AUDIT_CERT_INSTALLED" = 1 ]; then
 printf 'install ok installed'
 else
 exit 1
 fi''')
-        self.stub("apt-get", 'printf "apt-get %s\\n" "$*" >> "$AUDIT_LOG"')
+        self.stub("dpkg", '''case "$1" in
+--print-architecture) printf '%s\n' "$AUDIT_ARCH" ;;
+-i) printf 'dpkg %s\n' "$*" >> "$AUDIT_LOG"
+    [ "${AUDIT_KEYRING_FAIL:-0}" = 1 ] && exit 1
+    : > "$AUDIT_LOG.keyring-installed" ;;
+*) exit 1 ;;
+esac''')
+        self.stub("uname", "printf '7.0.0-test\\n'")
+        self.stub("apt-get", '''printf "apt-get %s\\n" "$*" >> "$AUDIT_LOG"
+if [ "$1" = update ] && [ "${AUDIT_UPDATE_FAIL:-0}" = 1 ]; then exit 100; fi
+if [ "$1" = upgrade ]; then
+    printf 'restart policy: %s\n' "${NEEDRESTART_MODE:-unset}" >> "$AUDIT_LOG"
+    if [ "${AUDIT_CHECK_APPLY:-0}" = 1 ]; then
+        [ -f "$HOME/.fixture" ] || exit 91
+        printf 'files already applied\n' >> "$AUDIT_LOG"
+    fi
+    [ "${AUDIT_UPGRADE_FAIL:-0}" = 1 ] && exit 100
+fi
+case "$*" in
+*'--no-upgrade audit-missing'*)
+    [ "${AUDIT_PACKAGE_FAIL:-0}" = 1 ] && exit 100
+    if [ "${AUDIT_CHECK_APPLY:-0}" = 1 ]; then
+        printf '#!/bin/sh\nexit 0\n' > "$AUDIT_BIN/audit-missing"
+        /bin/chmod +x "$AUDIT_BIN/audit-missing"
+    fi ;;
+*nvidia-dkms-open*)
+    [ "${AUDIT_DRIVER_FAIL:-0}" = 1 ] && exit 100
+    [ "${AUDIT_NO_DRIVER:-0}" = 1 ] || : > "$AUDIT_LOG.driver-installed" ;;
+esac
+exit 0''')
         self.stub("apt-cache", '''for p in $AUDIT_APT_MISSING; do [ "$3" = "$p" ] && exit 100; done
 exit 0''')
         self.stub("sudo", '''if [ "$1" = -n ]; then [ "$AUDIT_SUDO_NOPASS" = 1 ] || exit 1; shift; fi
@@ -73,7 +123,7 @@ done
 printf "curl %s\n" "$url" >> "$AUDIT_LOG"
 [ "${AUDIT_CURL_FAIL:-}" = "$url" ] && exit 22
 printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
-        for name in ["mktemp", "rm", "cat", "sh", "bash"]:
+        for name in ["mktemp", "rm", "cat", "sh", "bash", "awk", "readlink"]:
             (self.bin / name).symlink_to(shutil.which(name))
         (self.bin / "env").symlink_to("/usr/bin/env")
         self.setUp_node()
@@ -106,18 +156,34 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
             "--override-data", json.dumps(data), "--no-tty",
         ]
 
-    def run_installer(self, platform, packages, apply=False):
+    def render_script(self, platform, packages, after=False):
+        name = ("run_after_zz_upgrade-packages-linux.sh.tmpl" if after else
+                f"run_before_install-packages-{platform}.sh.tmpl")
+        rendered = subprocess.run(
+            self.base(platform, packages) + ["execute-template", "--file", str(SOURCE / name)],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        if platform == "linux":
+            for original, fixture in [
+                ("/sys/bus/pci/devices", self.pci),
+                ("/var/run/reboot-required", self.root / "reboot-required"),
+                ("/sys/module/nvidia/version", self.root / "nvidia-loaded-version"),
+                ("/proc/driver/nvidia/version", self.root / "nvidia-proc-version"),
+            ]:
+                rendered = rendered.replace(original, str(fixture))
+            os_release = self.root / "os-release"
+            os_release.write_text("ID=" + self.env.get("AUDIT_DISTRO", "ubuntu")
+                                  + "\nVERSION_ID=" + self.env.get("AUDIT_VERSION", "26.04") + "\n")
+            rendered = rendered.replace("/etc/os-release", str(os_release))
+        return rendered
+
+    def run_installer(self, platform, packages, apply=False, after=False):
         base = self.base(platform, packages)
         if apply:
             command = base + ["apply", str(self.home / f"install-packages-{platform}.sh")]
         else:
-            template = SOURCE / f"run_before_install-packages-{platform}.sh.tmpl"
-            rendered = subprocess.run(
-                base + ["execute-template", "--file", str(template)],
-                capture_output=True, text=True, check=True,
-            ).stdout
             script = self.root / "installer.sh"
-            script.write_text(rendered)
+            script.write_text(self.render_script(platform, packages, after=after))
             subprocess.run(["/bin/sh", "-n", str(script)], check=True)
             command = ["/bin/sh", str(script)]
         return subprocess.run(command, env=self.env, capture_output=True, text=True,
@@ -125,6 +191,146 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
 
     def calls(self):
         return self.log.read_text() if self.log.exists() else ""
+
+    def apply_linux_lifecycle(self, packages=()):
+        """Exercise real chezmoi ordering with mocked system commands."""
+        source = self.root / "lifecycle-source"
+        source.mkdir(exist_ok=True)
+        (source / "run_before_install-packages-linux.sh").write_text(
+            self.render_script("linux", packages))
+        (source / "run_after_zz_upgrade-packages-linux.sh").write_text(
+            self.render_script("linux", packages, after=True))
+        (source / "dot_fixture").write_text("managed configuration\n")
+        (source / "run_after_y_finish-files.sh").write_text(
+            '#!/bin/sh\nprintf "other after action\\n" >> "$AUDIT_LOG"\n')
+        base = self.base("linux", packages)
+        base[base.index("--source") + 1] = str(source)
+        self.env["AUDIT_CHECK_APPLY"] = "1"
+        return subprocess.run(
+            base + ["apply", "--force", "--exclude=externals"], env=self.env,
+            capture_output=True, text=True, timeout=30, start_new_session=True,
+        )
+
+    def test_dependencies_and_dotfiles_precede_required_upgrade(self):
+        self.gpu("0000:01:00.0")
+        result = self.apply_linux_lifecycle([
+            {"name": "audit-missing", "commands": ["audit-missing"]},
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        self.assertLess(calls.index("--no-upgrade audit-missing"), calls.index("nvidia-dkms-open"))
+        self.assertLess(calls.index("nvidia-dkms-open"), calls.index("other after action"))
+        self.assertLess(calls.index("other after action"), calls.index("apt-get upgrade"))
+        self.assertIn("files already applied", calls)
+        self.assertIn("restart policy: l", calls)
+        self.assertIn("--with-new-pkgs --no-remove", calls)
+        self.assertIn("Reboot required", result.stdout)
+        self.assertNotIn("sudo reboot\n", calls)
+
+    def test_required_upgrade_runs_on_every_apply_with_no_missing_tools(self):
+        for _ in range(2):
+            result = self.apply_linux_lifecycle()
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls().count("apt-get upgrade"), 2)
+        self.assertIn("No reboot requirement detected", result.stdout)
+
+    def test_upgrade_failure_returns_error_after_dotfiles_are_applied(self):
+        self.env["AUDIT_UPGRADE_FAIL"] = "1"
+        (self.root / "reboot-required").write_text("System restart required\n")
+        result = self.apply_linux_lifecycle()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.home / ".fixture").read_text(), "managed configuration\n")
+        self.assertIn("Apt upgrade is incomplete", result.stderr)
+        self.assertIn("Reboot required", result.stderr)
+
+    def test_update_failure_skips_upgrade_but_preserves_applied_files(self):
+        self.env["AUDIT_UPDATE_FAIL"] = "1"
+        result = self.apply_linux_lifecycle()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.home / ".fixture").exists())
+        self.assertNotIn("apt-get upgrade", self.calls())
+
+    def test_dependency_failure_still_allows_files_and_upgrade(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_DRIVER_FAIL"] = "1"
+        result = self.apply_linux_lifecycle()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.home / ".fixture").exists())
+        self.assertIn("NVIDIA driver setup", result.stderr)
+        self.assertIn("apt-get upgrade", self.calls())
+
+    def test_missing_ordinary_dependency_is_reported_after_upgrade(self):
+        self.env["AUDIT_PACKAGE_FAIL"] = "1"
+        result = self.apply_linux_lifecycle([
+            {"name": "audit-missing", "commands": ["audit-missing"]},
+        ])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.home / ".fixture").exists())
+        self.assertIn("apt-get upgrade", self.calls())
+        self.assertIn("Dependency still missing: audit-missing", result.stderr)
+
+    def test_final_upgrade_requires_admin_rights(self):
+        self.env.update(AUDIT_UID="1000", AUDIT_SUDO_NOPASS="0")
+        result = self.apply_linux_lifecycle()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.home / ".fixture").exists())
+        self.assertNotIn("apt-get", self.calls())
+        self.assertIn("Skipping apt upgrade", result.stdout)
+
+    def test_final_upgrade_uses_sudo_for_admin_user(self):
+        self.env["AUDIT_UID"] = "1000"
+        result = self.run_installer("linux", [], after=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("sudo apt-get update", self.calls())
+        self.assertIn("sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get upgrade", self.calls())
+
+    def test_final_apt_upgrade_is_disabled_on_macos(self):
+        self.assertEqual(self.render_script("darwin", [], after=True).strip(), "")
+
+    def test_os_reboot_flag_is_reported_only_at_the_end(self):
+        (self.root / "reboot-required").write_text("System restart required\n")
+        (self.root / "reboot-required.pkgs").write_text("linux-image-test\n")
+        result = self.run_installer("linux", [], after=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertLess(result.stdout.index("Apt upgrade finished"), result.stdout.index("Reboot required"))
+        self.assertIn("linux-image-test", result.stdout)
+
+    def test_updated_driver_module_requires_manual_reboot(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NVIDIA_INSTALLED"] = "1"
+        (self.root / "nvidia-loaded-version").write_text("595.71.05\n")
+        result = self.run_installer("linux", [], after=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Reboot required", result.stdout)
+        self.assertNotIn("NVIDIA still does not expose", result.stderr)
+
+    def test_matching_loaded_driver_needs_no_reboot(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NVIDIA_INSTALLED"] = "1"
+        (self.root / "nvidia-loaded-version").write_text("615.71.10\n")
+        self.stub("nvidia-smi", "printf '00000000:01:00.0\\n'")
+        result = self.run_installer("linux", [], after=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("No reboot requirement detected", result.stdout)
+        self.assertNotIn("nvidia-dkms-open", self.calls())
+
+    def test_pending_system_reboot_defers_gpu_health_diagnosis(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NVIDIA_INSTALLED"] = "1"
+        (self.root / "nvidia-loaded-version").write_text("615.71.10\n")
+        (self.root / "reboot-required").write_text("System restart required\n")
+        self.stub("nvidia-smi", "exit 1")
+        result = self.run_installer("linux", [], after=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("after the pending system reboot", result.stdout)
+        self.assertIn("Reboot required", result.stdout)
+
+    def test_final_gpu_check_preserves_passthrough_assignment(self):
+        self.gpu("0000:01:00.0", driver="vfio-pci")
+        result = self.run_installer("linux", [], after=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("assigned to", result.stderr)
+        self.assertNotIn("NVIDIA still does not expose", result.stderr)
 
     def test_existing_website_and_nvm_tools_need_no_homebrew(self):
         self.stub("audit-local-tool", directory=self.home / ".local/bin")
@@ -212,6 +418,150 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("sudo env SHELL=/bin/sh UV_INSTALL_DIR=/usr/local/bin sh", self.calls())
         self.assertIn("installer ran: SHELL=/bin/sh", self.calls())
+
+    def gpu(self, address, vendor="0x10de", kind="0x030000", driver=None):
+        device = self.pci / address
+        device.mkdir()
+        (device / "vendor").write_text(vendor + "\n")
+        (device / "class").write_text(kind + "\n")
+        if driver:
+            (device / "driver").symlink_to(self.root / "drivers" / driver)
+
+    def test_gpu_detection_excludes_audio_and_other_vendors(self):
+        self.gpu("0000:01:00.1", kind="0x040300")
+        self.gpu("0000:02:00.0", vendor="0x8086")
+        self.assertEqual(self.run_installer("linux", []).returncode, 0)
+        self.assertEqual(self.calls(), "")
+
+    def test_healthy_gpus_need_no_admin_or_installs(self):
+        self.gpu("0000:01:00.0")
+        self.gpu("0001:02:00.0", kind="0x030200")
+        self.stub("nvidia-smi", "printf '00000000:01:00.0\\n00000001:02:00.0\\n'")
+        self.env.update(AUDIT_UID="1000", AUDIT_SUDO_NOPASS="0")
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "")
+        self.assertNotIn("no administrator rights", result.stdout)
+
+    def test_unconfigured_gpu_without_admin_is_untouched(self):
+        self.gpu("0000:01:00.0")
+        self.env.update(AUDIT_UID="1000", AUDIT_SUDO_NOPASS="0")
+        result = self.run_installer("linux", [])
+        self.assertIn("no administrator rights", result.stdout)
+        self.assertEqual(self.calls(), "")
+
+    def test_missing_second_gpu_diagnoses_existing_driver(self):
+        self.gpu("0000:01:00.0")
+        self.gpu("0000:02:00.0")
+        self.stub("nvidia-smi", "printf '00000000:01:00.0\\n'")
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("not exposing every GPU", result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_driver_waiting_for_reboot_is_not_reinstalled(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NVIDIA_INSTALLED"] = "1"
+        result = self.run_installer("linux", [])
+        self.assertIn("Check reboot state", result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_passthrough_gpu_is_not_reconfigured(self):
+        self.gpu("0000:01:00.0", driver="vfio-pci")
+        result = self.run_installer("linux", [])
+        self.assertIn("assigned to", result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_fresh_ubuntu_gpu_host_bootstraps_driver_without_pin(self):
+        self.gpu("0000:01:00.0")
+        self.gpu("0000:02:00.0")
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("cuda/repos/ubuntu2604/x86_64/cuda-keyring_1.1-1_all.deb", self.calls())
+        self.assertIn("dpkg -i", self.calls())
+        self.assertIn("linux-headers-7.0.0-test libnvidia-compute nvidia-dkms-open", self.calls())
+        self.assertEqual(self.calls().count("nvidia-dkms-open"), 1)
+        self.assertLess(self.calls().index("dpkg -i"), self.calls().index("apt-get update"))
+        self.assertFalse(list(self.root.glob("dotfiles-cuda-keyring.*")))
+        self.assertIn("Final activation and reboot checks", result.stdout)
+        self.assertNotIn("reboot\n", self.calls())
+        # A second apply before reboot must not reinstall the newly added driver.
+        again = self.run_installer("linux", [])
+        self.assertIn("Check reboot state", again.stderr)
+        self.assertEqual(self.calls().count("nvidia-dkms-open"), 1)
+
+    def test_no_supported_driver_does_not_claim_installation_success(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NO_DRIVER"] = "1"
+        result = self.run_installer("linux", [])
+        self.assertIn("driver packages were not installed", result.stderr)
+        self.assertNotIn("Final activation and reboot checks", result.stdout)
+
+    def test_partially_installed_driver_needs_diagnosis(self):
+        self.gpu("0000:01:00.0")
+        self.env.update(AUDIT_NVIDIA_INSTALLED="1", AUDIT_NVIDIA_STATUS="iF")
+        result = self.run_installer("linux", [])
+        self.assertIn("Check reboot state", result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_driver_install_failure_continues_and_reuses_keyring_on_retry(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_DRIVER_FAIL"] = "1"
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("NVIDIA driver setup", result.stderr)
+        self.env["AUDIT_DRIVER_FAIL"] = "0"
+        again = self.run_installer("linux", [])
+        self.assertIn("Final activation and reboot checks", again.stdout)
+        self.assertEqual(self.calls().count("dpkg -i"), 1)
+        self.assertEqual(self.calls().count("nvidia-dkms-open"), 2)
+
+    def test_keyring_download_failure_does_not_run_privileged_install(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_CURL_FAIL"] = ("https://developer.download.nvidia.com/compute/cuda/repos/"
+                                       "ubuntu2604/x86_64/cuda-keyring_1.1-1_all.deb")
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("NVIDIA driver setup", result.stderr)
+        self.assertNotIn("dpkg -i", self.calls())
+        self.assertNotIn("apt-get", self.calls())
+        self.assertFalse(list(self.root.glob("dotfiles-cuda-keyring.*")))
+
+    def test_keyring_install_failure_does_not_install_driver(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_KEYRING_FAIL"] = "1"
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("NVIDIA driver setup", result.stderr)
+        self.assertNotIn("apt-get", self.calls())
+        self.assertFalse(list(self.root.glob("dotfiles-cuda-keyring.*")))
+
+    def test_supported_releases_and_arm64_select_the_matching_repository(self):
+        self.gpu("0000:01:00.0")
+        for version, distribution in [("22.04", "ubuntu2204"), ("24.04", "ubuntu2404")]:
+            with self.subTest(version=version):
+                self.log.unlink(missing_ok=True)
+                self.env.update(AUDIT_VERSION=version, AUDIT_ARCH="arm64", AUDIT_DRIVER_FAIL="1")
+                Path(str(self.log) + ".keyring-installed").unlink(missing_ok=True)
+                result = self.run_installer("linux", [])
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"cuda/repos/{distribution}/sbsa/", self.calls())
+
+    def test_unknown_release_or_architecture_does_not_add_repository(self):
+        self.gpu("0000:01:00.0")
+        for version, arch in [("28.04", "amd64"), ("26.04", "riscv64")]:
+            with self.subTest(version=version, arch=arch):
+                self.env.update(AUDIT_VERSION=version, AUDIT_ARCH=arch)
+                result = self.run_installer("linux", [])
+                self.assertIn("NVIDIA driver setup", result.stderr)
+                self.assertEqual(self.calls(), "")
+
+    def test_other_distributions_do_not_use_ubuntu_driver_tool(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_DISTRO"] = "debian"
+        result = self.run_installer("linux", [])
+        self.assertIn("supports Ubuntu only", result.stderr)
+        self.assertEqual(self.calls(), "")
 
     def test_mac_official_installers_only_for_missing_commands(self):
         self.stub("audit-present")

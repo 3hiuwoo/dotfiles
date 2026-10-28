@@ -1,0 +1,91 @@
+{{ if eq .chezmoi.os "linux" -}}
+#!/bin/sh
+set -eu
+
+# run_after executes after all target files. The zz_ prefix keeps this after
+# the other after scripts too. Run on every full apply, even with no new tools.
+{{ template "command-path.sh" . }}
+{{ template "linux-admin.sh" . }}
+{{ template "nvidia.sh" . }}
+if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
+    printf '%s\n' 'Skipping apt upgrade: only Debian/Ubuntu (apt) is supported.'
+    exit 0
+fi
+if ! acquire_admin; then
+    printf '%s\n' 'Skipping apt upgrade: no administrator rights on this machine. Dotfiles have been applied.'
+    exit 0
+fi
+
+printf '%s\n' 'Dotfiles applied. Running the required apt package upgrade.'
+upgrade_status=0
+if as_root apt-get update -o APT::Update::Error-Mode=any; then
+    # apt upgrade semantics: new dependencies are allowed, removals are not.
+    # Keep existing configuration files and ask humans to handle restarts.
+    as_root env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l \
+        apt-get upgrade -y --with-new-pkgs --no-remove \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+        || upgrade_status=1
+else
+    upgrade_status=1
+fi
+if [ "$upgrade_status" -ne 0 ]; then
+    printf '%s\n' 'Apt upgrade is incomplete. Dotfiles remain applied; fix the reported package error and run chezmoi apply again.' >&2
+else
+    printf '%s\n' 'Apt upgrade finished.'
+fi
+
+# Before-script failures must not stop file application, but they must still
+# be visible in the final result. Unavailable distro packages stay optional.
+{{ range .packages.linux.apt -}}
+{{ if .commands -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+{{ else -}}
+if [ "$(dpkg-query -W -f='${Status}' {{ .name | quote }} 2>/dev/null || true)" != 'install ok installed' ]; then
+{{ end -}}
+    if apt-cache show --no-all-versions {{ .name | quote }} >/dev/null 2>&1; then
+        printf 'Dependency still missing: %s. Run chezmoi apply again after resolving the installation error.\n' {{ .name | quote }} >&2
+        upgrade_status=1
+    fi
+fi
+{{ end -}}
+{{ range .packages.linux.scripts -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    printf 'Dependency still missing: %s. Run chezmoi apply again after resolving the installation error.\n' {{ .name | quote }} >&2
+    upgrade_status=1
+fi
+{{ end -}}
+
+reboot_needed=0
+if [ -f /var/run/reboot-required ]; then
+    reboot_needed=1
+    cat /var/run/reboot-required
+    if [ -r /var/run/reboot-required.pkgs ]; then
+        printf '%s\n' 'Packages requesting a reboot:'
+        cat /var/run/reboot-required.pkgs
+    fi
+fi
+nvidia_pci=$(nvidia_gpu_addresses)
+if [ -n "$nvidia_pci" ] && nvidia_driver_available; then
+    if nvidia_reboot_needed; then
+        reboot_needed=1
+        printf '%s\n' 'The installed NVIDIA driver is not the loaded driver; reboot to activate it.'
+    elif ! nvidia_healthy; then
+        if [ "$reboot_needed" -eq 1 ]; then
+            printf '%s\n' 'NVIDIA GPU visibility will be checked again after the pending system reboot.'
+        else
+            printf '%s\n' 'NVIDIA still does not expose every GPU. Check driver support, kernel logs, and module signing.' >&2
+            upgrade_status=1
+        fi
+    fi
+fi
+if [ "$reboot_needed" -eq 1 ]; then
+    if [ "$upgrade_status" -eq 0 ]; then
+        printf '%s\n' 'Reboot required. Save your work and run sudo reboot when ready, then run chezmoi apply to verify. No reboot was performed.'
+    else
+        printf '%s\n' 'Reboot required, but package or driver errors remain. Resolve them first, then reboot manually and run chezmoi apply to verify. No reboot was performed.' >&2
+    fi
+else
+    printf '%s\n' 'No reboot requirement detected. No reboot was performed.'
+fi
+exit "$upgrade_status"
+{{ end -}}

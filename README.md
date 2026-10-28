@@ -7,7 +7,7 @@ servers. The OS is detected automatically; there is nothing to choose.
 | --- | --- | --- |
 | Shell | zsh | Bash (login shell is never changed) |
 | Config synced | Everything below | Shell, Git/Delta, Vim, Bat/Eza themes, gh, Lazygit, Starship, uv, Conda, SSH aliases |
-| Tools installed | Missing ones only (Homebrew + official installers) | Missing ones only, **and only with admin rights**; otherwise none |
+| Tools installed | Missing ones only (Homebrew + official installers) | Install missing tools, then upgrade apt packages after applying files; **admin rights required** |
 | Agents (Claude, Codex, skills) | Yes | No |
 | Desktop apps (Ghostty, cmux, Zed, Rectangle, Yazi) | Config only; install the apps yourself | No |
 
@@ -16,7 +16,7 @@ servers. The OS is detected automatically; there is nothing to choose.
 ```sh
 chezmoi edit ~/.zshrc        # edit the source copy of a file
 chezmoi diff                 # preview what apply would change
-chezmoi apply                # apply files (and install missing tools)
+chezmoi apply                # install missing tools, apply files; Linux admins also upgrade apt packages
 chezmoi apply -x scripts     # apply files only, no installers
 chezmoi apply -R             # also refresh downloaded plugins now
 cd ~/.local/share/chezmoi    # the source repo; commit here
@@ -36,7 +36,8 @@ files holding secrets (see [Local files](#local-files-never-synced)).
 
 ## Tools
 
-Edit **`.chezmoidata/packages.toml`**. It is the only tool list.
+Edit **`.chezmoidata/packages.toml`** for ordinary tools. NVIDIA driver
+provisioning is described separately below.
 
 | Section | Meaning |
 | --- | --- |
@@ -55,9 +56,15 @@ is skipped, however it was installed. Adding a tool is one line:
 
 How installation behaves:
 
-- **Never upgrades.** Use each tool's own updater (`brew upgrade`, `claude update`, ...).
-- **Never blocks syncing.** A failed install is reported, files are still
-  applied, and the next apply retries.
+- **Missing dependencies are installed before files are applied.** Installation
+  failures are reported without stopping file application.
+- **Linux apt upgrades are required after file application.** Every full apply
+  with admin rights refreshes the apt index and upgrades all installed apt
+  packages, including NVIDIA drivers from configured repositories. Mac tools
+  and tools installed outside apt keep their own update commands.
+- **Failures remain visible.** The final Linux step returns an error for a
+  failed apt upgrade or an available dependency still missing, after dotfiles
+  have been applied. The next apply retries.
 - **Never edits your rc files.** Installers run with `SHELL=/bin/sh` and their
   opt-out flags.
 - **Linux needs admin rights:** root, passwordless sudo, or the `sudo` group with
@@ -65,12 +72,58 @@ How installation behaves:
   servers that aren't yours stay untouched. Packages a release doesn't carry
   (e.g. `starship` on Ubuntu 24.04) are skipped.
 
+The Linux order is: install dependencies (including an initial NVIDIA driver),
+apply files and other after actions, upgrade apt packages, then report reboot
+requirements. The scripted upgrade uses `apt-get upgrade --with-new-pkgs`,
+equivalent to `apt upgrade` in allowing new dependencies without removing
+packages. Package holds and branch pins are respected. It does not run
+`autoremove`, unload GPU modules, or reboot. Upgrade configuration prompts keep
+existing files; `needrestart` is asked to list restart needs for human handling.
+
+At the end, the OS reboot flag and installed-versus-loaded NVIDIA driver version
+are checked. Reboot manually when ready, then run `chezmoi apply` again to
+verify. If package errors remain, resolve those before rebooting. An earlier
+file or after-action failure stops chezmoi before the final upgrade step.
+
 Server status (checked 2026-10-27): `miaa-hpc1`, `miaa-hpc2` and `miaa-lab` have
 no sudo, so only config is applied. `miaa-sxy` asks for the sudo password when
 you run `chezmoi apply` in a terminal.
 
 Not provisioned on purpose: other agent CLIs (Copilot, Cursor, Droid, Kiro,
 Qoder), `uv tool` and npm global packages, CUDA/Conda/Python environments.
+
+## NVIDIA GPUs on Linux
+
+`nvitop` is in the normal apt list: it is installed only when missing and with
+admin rights, just like the other Linux tools. If the release does not carry
+it, it is skipped.
+
+On every apply, the Linux installer discovers NVIDIA display/compute devices
+from PCI sysfs and compares their addresses with `nvidia-smi`. There is no
+hostname list, fixed GPU count, or pinned driver branch. A new server or GPU
+swap is checked the same way. Healthy GPUs need no reinstall; the final apt
+upgrade can still update their driver normally.
+
+On an Ubuntu machine with root/sudo access and no existing NVIDIA driver,
+unconfigured GPUs trigger NVIDIA's compute-only installation: enable its apt
+repository with `cuda-keyring`, then install matching running-kernel headers,
+`libnvidia-compute`, and `nvidia-dkms-open`. The open kernel modules are recommended
+for RTX 40/Ada and required for RTX 50/Blackwell. Ubuntu 22.04, 24.04, and 26.04
+are supported on amd64 and arm64; other releases/architectures are reported
+without adding a repository. The driver branch is not pinned. Driver
+dependencies may be upgraded by this operation; the CUDA development toolkit
+is not installed. See [NVIDIA's Ubuntu guide](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/latest/ubuntu.html)
+and [kernel-module guidance](https://developer.nvidia.com/blog/nvidia-transitions-fully-towards-open-source-gpu-kernel-modules/).
+
+An existing driver is left for the final apt upgrade, which installs newer
+available versions from its configured repository. Package upgrades replace the
+installed version; a loaded older module remains active until reboot. If any
+GPU remains unavailable afterward, the final check requests a reboot when the
+module version differs, or reports a problem for diagnosis. Devices assigned to
+another driver such as `vfio-pci` are excluded from NVIDIA setup and verification.
+Automatic initial NVIDIA installation is Ubuntu-only; other apt distributions
+still receive their normal package upgrades. After rebooting, run `chezmoi apply`
+again to verify.
 
 ## Local files (never synced)
 
@@ -167,6 +220,7 @@ If help tags go missing, run `:helptags ALL` in Vim.
 | `.chezmoidata/`, `.chezmoitemplates/` | Package and skill manifests; shared script snippets |
 | `.chezmoiignore` | What each OS skips |
 | `run_before_install-packages-*.sh.tmpl` | Tool installers |
+| `run_after_zz_upgrade-packages-linux.sh.tmpl` | Required final apt upgrade and manual reboot handoff (Linux admins) |
 | `run_after_install-agent-skills.sh.tmpl` | Skill installer and Claude links |
 | `run_onchange_after_*` | Rebuild bat's theme cache; apply Rectangle preferences |
 
