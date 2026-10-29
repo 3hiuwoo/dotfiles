@@ -64,6 +64,20 @@ esac''')
 *nvidia-driver-*)
     if [ "$AUDIT_NVIDIA_INSTALLED" = 1 ] || [ -f "$AUDIT_LOG.driver-installed" ]; then
         printf '%s nvidia-dkms-open\n' "${AUDIT_NVIDIA_STATUS:-ii}"
+    elif [ -n "${AUDIT_COMPUTE_BRANCH:-}" ]; then
+        printf 'ii libnvidia-compute-%s:amd64\n' "$AUDIT_COMPUTE_BRANCH"
+    fi
+    exit 0 ;;
+*'libnvidia-compute*'*)
+    if [ -n "${AUDIT_COMPUTE_BRANCH:-}" ]; then
+        for branch in $AUDIT_COMPUTE_BRANCH; do
+            printf 'ii libnvidia-compute-%s:amd64\n' "$branch"
+        done
+    fi
+    exit 0 ;;
+*'nvidia-dkms-*'*)
+    if [ "$AUDIT_NVIDIA_INSTALLED" = 1 ] || [ -f "$AUDIT_LOG.driver-installed" ]; then
+        printf '%s nvidia-dkms-open\n' "${AUDIT_NVIDIA_STATUS:-ii}"
     fi
     exit 0 ;;
 *nvidia-dkms-open*)
@@ -85,6 +99,14 @@ fi''')
 *) exit 1 ;;
 esac''')
         self.stub("uname", "printf '7.0.0-test\\n'")
+        self.stub("modinfo", '''[ "${AUDIT_MODULE_MISSING:-0}" = 1 ] && exit 1
+if [ "$AUDIT_NVIDIA_INSTALLED" = 1 ] || [ -f "$AUDIT_LOG.driver-installed" ]; then
+    version=${AUDIT_DRIVER_VERSION:-615.71.10-1ubuntu1}
+    version=${version#*:}
+    printf '%s\n' "${version%%-*}"
+else
+    exit 1
+fi''')
         self.stub("apt-get", '''printf "apt-get %s\\n" "$*" >> "$AUDIT_LOG"
 if [ "$1" = update ] && [ "${AUDIT_UPDATE_FAIL:-0}" = 1 ]; then exit 100; fi
 if [ "$1" = upgrade ]; then
@@ -102,9 +124,16 @@ case "$*" in
         printf '#!/bin/sh\nexit 0\n' > "$AUDIT_BIN/audit-missing"
         /bin/chmod +x "$AUDIT_BIN/audit-missing"
     fi ;;
-*nvidia-dkms-open*)
+*nvidia-dkms-open*|*nvidia-headless-*)
     [ "${AUDIT_DRIVER_FAIL:-0}" = 1 ] && exit 100
     [ "${AUDIT_NO_DRIVER:-0}" = 1 ] || : > "$AUDIT_LOG.driver-installed" ;;
+esac
+case "$*" in
+*nvidia-dkms-open*|*nvidia-utils-*)
+    if [ "${AUDIT_NO_SMI:-0}" != 1 ] && [ "${AUDIT_NO_DRIVER:-0}" != 1 ]; then
+        printf '#!/bin/sh\nexit 1\n' > "$AUDIT_BIN/nvidia-smi"
+        /bin/chmod +x "$AUDIT_BIN/nvidia-smi"
+    fi ;;
 esac
 exit 0''')
         self.stub("apt-cache", '''for p in $AUDIT_APT_MISSING; do [ "$3" = "$p" ] && exit 100; done
@@ -298,6 +327,7 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
     def test_updated_driver_module_requires_manual_reboot(self):
         self.gpu("0000:01:00.0")
         self.env["AUDIT_NVIDIA_INSTALLED"] = "1"
+        self.stub("nvidia-smi", "exit 1")
         (self.root / "nvidia-loaded-version").write_text("595.71.05\n")
         result = self.run_installer("linux", [], after=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -489,6 +519,87 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
         again = self.run_installer("linux", [])
         self.assertIn("Check reboot state", again.stderr)
         self.assertEqual(self.calls().count("nvidia-dkms-open"), 1)
+
+    def test_library_only_installation_is_completed_in_its_existing_branch(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_COMPUTE_BRANCH"] = "580"
+        result = self.apply_linux_lifecycle()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        self.assertIn("Completing NVIDIA compute installation in existing branch 580", result.stdout)
+        self.assertIn("linux-modules-nvidia-580-open-7.0.0-test", calls)
+        self.assertIn("linux-modules-nvidia-580-open-test", calls)
+        self.assertIn("nvidia-headless-no-dkms-580-open nvidia-utils-580", calls)
+        self.assertIn("--no-remove --no-install-recommends", calls)
+        self.assertNotIn("cuda-keyring", calls)
+        self.assertNotIn("nvidia-dkms-open", calls)
+        self.assertIn("Reboot required", result.stdout)
+        self.assertTrue((self.home / ".fixture").exists())
+        again = self.run_installer("linux", [])
+        self.assertIn("Check reboot state", again.stderr)
+        self.assertEqual(self.calls(), calls)
+
+    def test_library_only_repair_falls_back_to_matching_open_dkms(self):
+        self.gpu("0000:01:00.0")
+        self.env.update(AUDIT_COMPUTE_BRANCH="580-server",
+                        AUDIT_APT_MISSING="linux-modules-nvidia-580-server-open-7.0.0-test")
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("linux-headers-7.0.0-test nvidia-headless-580-server-open nvidia-utils-580-server", self.calls())
+
+    def test_existing_module_only_needs_matching_missing_utility(self):
+        self.gpu("0000:01:00.0")
+        self.env.update(AUDIT_NVIDIA_INSTALLED="1", AUDIT_COMPUTE_BRANCH="580")
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--no-install-recommends nvidia-utils-580", self.calls())
+        self.assertNotIn("nvidia-headless", self.calls())
+        self.assertNotIn("cuda-keyring", self.calls())
+
+    def test_mixed_library_branches_are_not_automatically_reconfigured(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_COMPUTE_BRANCH"] = "580 595"
+        result = self.run_installer("linux", [])
+        self.assertIn("Check reboot state", result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_missing_utility_is_an_error_even_with_pending_reboot(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NVIDIA_INSTALLED"] = "1"
+        (self.root / "reboot-required").write_text("System restart required\n")
+        result = self.run_installer("linux", [], after=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("NVIDIA installation is incomplete", result.stderr)
+        self.assertNotIn("after the pending system reboot", result.stdout)
+
+    def test_missing_running_kernel_module_is_not_a_reboot_only_state(self):
+        self.gpu("0000:01:00.0")
+        self.env.update(AUDIT_NVIDIA_INSTALLED="1", AUDIT_MODULE_MISSING="1")
+        self.stub("nvidia-smi", "exit 1")
+        (self.root / "reboot-required").write_text("System restart required\n")
+        result = self.run_installer("linux", [], after=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("running-kernel module is missing", result.stderr)
+
+    def test_incomplete_repair_still_applies_files_but_returns_failure(self):
+        self.gpu("0000:01:00.0")
+        self.env.update(AUDIT_COMPUTE_BRANCH="580", AUDIT_NO_SMI="1")
+        (self.root / "reboot-required").write_text("System restart required\n")
+        result = self.apply_linux_lifecycle()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.home / ".fixture").exists())
+        self.assertIn("apt-get upgrade", self.calls())
+        self.assertIn("NVIDIA installation is incomplete", result.stderr)
+
+    def test_fresh_install_without_utility_is_not_reported_as_awaiting_reboot(self):
+        self.gpu("0000:01:00.0")
+        self.env["AUDIT_NO_SMI"] = "1"
+        (self.root / "reboot-required").write_text("System restart required\n")
+        result = self.apply_linux_lifecycle()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.home / ".fixture").exists())
+        self.assertIn("driver packages were not installed completely", result.stderr)
+        self.assertNotIn("Final activation and reboot checks", result.stdout)
 
     def test_no_supported_driver_does_not_claim_installation_success(self):
         self.gpu("0000:01:00.0")

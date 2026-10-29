@@ -51,6 +51,66 @@ nvidia_driver_packages() {
         | awk '$1 ~ /^.[iUFWtH]/ && $2 !~ /^nvidia-driver-pinning-/ { print $2 }'
 }
 
+# Libraries and firmware alone do not supply a kernel driver. Keep this check
+# separate so an interrupted/headless installation can be completed in place.
+nvidia_kernel_packages() {
+    dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' \
+        'nvidia-dkms-*' 'linux-modules-nvidia-*' 2>/dev/null \
+        | awk '$1 ~ /^.[iUFWtH]/ { print $2 }'
+}
+
+nvidia_module_version() {
+    modinfo -k "$(uname -r)" -F version nvidia 2>/dev/null
+}
+
+nvidia_components_ready() {
+    command -v nvidia-smi >/dev/null 2>&1 && nvidia_module_version >/dev/null
+}
+
+# Only fully configured compute libraries identify a branch safe to complete.
+# Mixed branches and unconfigured packages require diagnosis instead.
+nvidia_compute_branches() {
+    dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' \
+        'libnvidia-compute*' 2>/dev/null | awk '
+        $1 == "ii" {
+            name = $2
+            sub(/:.*/, "", name)
+            if (name ~ /^libnvidia-compute-[0-9]+(-server)?$/) {
+                sub(/^libnvidia-compute-/, "", name)
+                if (!seen[name]++) print name
+            }
+        }'
+}
+
+complete_nvidia_branch() {
+    gpu_branch=$1
+    as_root apt-get update || return 1
+    if ! nvidia_module_version >/dev/null; then
+        gpu_kernel=$(uname -r)
+        gpu_flavour=${gpu_kernel#*-}
+        gpu_flavour=${gpu_flavour#*-}
+        gpu_module="linux-modules-nvidia-$gpu_branch-open-$gpu_kernel"
+        gpu_module_meta="linux-modules-nvidia-$gpu_branch-open-$gpu_flavour"
+        if apt-cache show --no-all-versions "$gpu_module" >/dev/null 2>&1 \
+            && apt-cache show --no-all-versions "$gpu_module_meta" >/dev/null 2>&1; then
+            # Prefer Ubuntu's signed modules for the running kernel, and track
+            # future kernels through the matching flavour metapackage.
+            set -- "$gpu_module" "$gpu_module_meta" "nvidia-headless-no-dkms-$gpu_branch-open"
+        else
+            set -- "linux-headers-$gpu_kernel" "nvidia-headless-$gpu_branch-open"
+        fi
+    else
+        set --
+    fi
+    as_root env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y \
+        --no-remove --no-install-recommends "$@" "nvidia-utils-$gpu_branch" || return 1
+    if ! nvidia_components_ready; then
+        printf '%s\n' 'NVIDIA installation is incomplete: nvidia-smi or the running-kernel module is missing. A reboot cannot repair missing components.' >&2
+        return 1
+    fi
+    printf '%s\n' 'NVIDIA compute components installed. Final activation and reboot checks follow dotfiles and apt upgrade.'
+}
+
 nvidia_repository() (
     . /etc/os-release
     case ${VERSION_ID:-} in
@@ -82,19 +142,16 @@ nvidia_driver_available() {
 }
 
 nvidia_reboot_needed() {
-    gpu_installed_version=$(dpkg-query -W -f='${Status} ${Version}\n' nvidia-dkms-open 2>/dev/null \
-        | awk '$1 == "install" && $2 == "ok" && $3 == "installed" { print $4 }')
+    gpu_installed_version=$(nvidia_module_version) || return 1
     [ -n "$gpu_installed_version" ] || return 1
-    gpu_installed_version=${gpu_installed_version#*:}
-    gpu_installed_version=${gpu_installed_version%%-*}
     [ -r /sys/module/nvidia/version ] || return 0
     gpu_loaded_version=$(cat /sys/module/nvidia/version)
     [ "$gpu_installed_version" != "$gpu_loaded_version" ]
 }
 
 # Called only after the installer's root/sudo check. This bootstraps a driver
-# on a fresh Ubuntu host; it never replaces an existing driver or reloads a
-# module. A failed health check is evidence to diagnose, not a reinstall order.
+# on a fresh Ubuntu host, or completes known versioned compute libraries in
+# their existing branch. It never reloads modules or replaces a kernel driver.
 configure_nvidia() {
     printf 'NVIDIA GPUs needing a driver health check:\n%s\n' "$nvidia_pci"
     if ! ubuntu_system; then
@@ -103,6 +160,18 @@ configure_nvidia() {
     fi
     nvidia_driver_available || return 0
     gpu_packages=$(nvidia_driver_packages)
+    if ! nvidia_components_ready; then
+        gpu_branches=$(nvidia_compute_branches)
+        # Branches are validated package-name suffixes, with no glob characters.
+        # shellcheck disable=SC2086
+        set -- $gpu_branches
+        if [ "$#" -eq 1 ] && { nvidia_module_version >/dev/null \
+            || { [ -z "$(nvidia_kernel_packages)" ] && [ ! -r /proc/driver/nvidia/version ]; }; }; then
+            printf 'Completing NVIDIA compute installation in existing branch %s.\n' "$1"
+            complete_nvidia_branch "$1"
+            return $?
+        fi
+    fi
     if [ -n "$gpu_packages" ] || [ -r /proc/driver/nvidia/version ] \
         || command -v nvidia-smi >/dev/null 2>&1; then
         printf '%s\n' 'Existing NVIDIA driver is not exposing every GPU. Available driver updates will be applied after dotfiles. Check reboot state, kernel logs, module signing, and hardware compatibility if the problem remains.' >&2
@@ -130,10 +199,10 @@ configure_nvidia() {
         libnvidia-compute nvidia-dkms-open || return 1
     if nvidia_healthy; then
         printf '%s\n' 'NVIDIA driver exposes every detected GPU.'
-    elif [ -n "$(nvidia_driver_packages)" ]; then
+    elif nvidia_components_ready; then
         printf '%s\n' 'NVIDIA driver packages installed. Final activation and reboot checks follow dotfiles and apt upgrade.'
     else
-        printf '%s\n' 'NVIDIA driver packages were not installed. Check repository and hardware support; no reboot was performed.' >&2
+        printf '%s\n' 'NVIDIA driver packages were not installed completely: nvidia-smi or the running-kernel module is missing. Check package errors; no reboot was performed.' >&2
         return 1
     fi
 }

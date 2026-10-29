@@ -66,7 +66,10 @@ if [ -f /var/run/reboot-required ]; then
 fi
 nvidia_pci=$(nvidia_gpu_addresses)
 if [ -n "$nvidia_pci" ] && nvidia_driver_available; then
-    if nvidia_reboot_needed; then
+    if ! nvidia_components_ready; then
+        printf '%s\n' 'NVIDIA installation is incomplete: nvidia-smi or the running-kernel module is missing. Resolve package errors and run chezmoi apply again; reboot alone cannot fix this.' >&2
+        upgrade_status=1
+    elif nvidia_reboot_needed; then
         reboot_needed=1
         printf '%s\n' 'The installed NVIDIA driver is not the loaded driver; reboot to activate it.'
     elif ! nvidia_healthy; then

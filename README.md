@@ -136,12 +136,24 @@ dependencies may be upgraded by this operation; the CUDA development toolkit
 is not installed. See [NVIDIA's Ubuntu guide](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/latest/ubuntu.html)
 and [kernel-module guidance](https://developer.nvidia.com/blog/nvidia-transitions-fully-towards-open-source-gpu-kernel-modules/).
 
-An existing driver is left for the final apt upgrade, which installs newer
-available versions from its configured repository. Package upgrades replace the
+An installation with only versioned compute libraries is completed in its
+existing branch, including `nvidia-utils-<branch>` for `nvidia-smi`. The installer
+prefers Ubuntu's signed open modules for the running kernel and the matching
+kernel-flavour metapackage; if unavailable, it installs matching headers and
+the branch's open headless DKMS metapackage. No new repository is added for this
+repair, package removals are forbidden, and mixed branches or existing broken
+kernel-driver packages are left for diagnosis. If the running-kernel module is
+already present, only the matching missing utility is requested.
+
+An otherwise existing driver is left for the final apt upgrade, which installs
+newer available versions from its configured repository. Package upgrades replace the
 installed version; a loaded older module remains active until reboot. If any
 GPU remains unavailable afterward, the final check requests a reboot when the
-module version differs, or reports a problem for diagnosis. Devices assigned to
-another driver such as `vfio-pci` are excluded from NVIDIA setup and verification.
+on-disk module version differs from the loaded module, or reports a problem for
+diagnosis. Missing `nvidia-smi` or a missing module for the running kernel is an
+installation error even when a system reboot is pending; reboot cannot supply
+missing components. Devices assigned to another driver such as `vfio-pci` are
+excluded from NVIDIA setup and verification.
 Automatic initial NVIDIA installation is Ubuntu-only; other apt distributions
 still receive their normal package upgrades. After rebooting, run `chezmoi apply`
 again to verify.
