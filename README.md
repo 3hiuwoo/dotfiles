@@ -51,10 +51,12 @@ provisioning is described separately below.
 | Section | Meaning |
 | --- | --- |
 | `packages.darwin.brews` | Mac tools from Homebrew |
+| `packages.uv_tools` | Python CLIs from `uv tool install`, per user on both systems (hf from `huggingface-hub`) |
 | `packages.darwin.scripts` | Mac tools from their official installer (uv, Bun, Claude Code, Codex, Grok, Antigravity) |
 | `packages.darwin.nvm` | Node.js, through nvm |
 | `packages.linux.apt` | Linux tools from apt |
-| `packages.linux.scripts` | Linux tools from their official installer (uv) |
+| `packages.linux.user_scripts` | Linux tools from their official installer, per user into `~/.local/bin` without admin rights (uv) |
+| `packages.linux.scripts` | Linux tools from their official installer, globally with admin rights (none yet) |
 
 Each entry lists the `commands` it provides. If they all exist already, the tool
 is skipped, however it was installed. Adding a tool is one line:
@@ -88,10 +90,15 @@ How installation behaves:
   have been applied. The next apply retries.
 - **Never edits your rc files.** Installers run with `SHELL=/bin/sh` and their
   opt-out flags.
-- **Linux needs admin rights:** root, passwordless sudo, or the `sudo` group with
-  a terminal to type the password into. Without them nothing is installed, so
-  servers that aren't yours stay untouched. Packages a release doesn't carry
-  are skipped.
+- **Per-user tools need no admin rights.** uv and the `uv_tools` install into
+  `~/.local/bin` on every machine, before the admin check. A copy already on
+  PATH (for example a server-wide uv) is used instead. `uv_tools` use
+  uv-managed Python, so they work on servers with an old system Python, and
+  are skipped when uv itself could not be installed.
+- **Linux system packages need admin rights:** root, passwordless sudo, or the
+  `sudo` group with a terminal to type the password into. Without them apt
+  packages, global installers, and NVIDIA setup are skipped, so servers that
+  aren't yours stay untouched. Packages a release doesn't carry are skipped.
 
 The Linux order is: install dependencies (including an initial NVIDIA driver),
 apply files and other after actions, upgrade apt packages, then report reboot
@@ -107,11 +114,12 @@ verify. If package errors remain, resolve those before rebooting. An earlier
 file or after-action failure stops chezmoi before the final upgrade step.
 
 Server status (checked 2026-10-27): `miaa-hpc1`, `miaa-hpc2` and `miaa-lab` have
-no sudo, so only config is applied. `miaa-sxy` asks for the sudo password when
+no sudo, so only per-user tools and config are applied. `miaa-sxy` asks for the sudo password when
 you run `chezmoi apply` in a terminal.
 
 Not provisioned on purpose: other agent CLIs (Copilot, Cursor, Droid, Kiro,
-Qoder), `uv tool` and npm global packages, CUDA/Conda/Python environments.
+Qoder), `uv tool` packages beyond `uv_tools`, npm global packages,
+CUDA/Conda/Python environments.
 
 ## NVIDIA GPUs on Linux
 
@@ -133,7 +141,9 @@ for RTX 40/Ada and required for RTX 50/Blackwell. Ubuntu 22.04, 24.04, and 26.04
 are supported on amd64 and arm64; other releases/architectures are reported
 without adding a repository. The driver branch is not pinned. Driver
 dependencies may be upgraded by this operation; the CUDA development toolkit
-is not installed. See [NVIDIA's Ubuntu guide](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/latest/ubuntu.html)
+is not installed. When you install one yourself, the managed `.bashrc` sets
+`CUDA_HOME=/usr/local/cuda` (unless `CUDA_HOME` is already set) and puts
+`$CUDA_HOME/bin` on PATH. See [NVIDIA's Ubuntu guide](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/latest/ubuntu.html)
 and [kernel-module guidance](https://developer.nvidia.com/blog/nvidia-transitions-fully-towards-open-source-gpu-kernel-modules/).
 
 An installation with only versioned compute libraries is completed in its

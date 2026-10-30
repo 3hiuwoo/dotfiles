@@ -159,7 +159,7 @@ class BashTests(unittest.TestCase):
         (self.home / ".bashrc.local").write_text("alias gs='git status --short'\n")
         output = self.interactive(
             'first=$PATH; . "$HOME/.bashrc"; [[ $PATH == "$first" ]] || exit 1; '
-            '[[ $HISTSIZE == 2000 && $HISTFILESIZE == 1000 && -o vi ]] || exit 2; '
+            '[[ $HISTSIZE == 10000 && $HISTFILESIZE == 20000 && -o vi ]] || exit 2; '
             'shopt -q histappend checkwinsize || exit 3; alias gs; '
             'mkcd "$HOME/path with spaces" || exit 4; '
             '[[ $PWD == "$HOME/path with spaces" ]] || exit 5; printf "BASH_OK\\n"'

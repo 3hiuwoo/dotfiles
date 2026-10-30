@@ -7,28 +7,43 @@ set -eu
 {{ template "command-path.sh" . }}
 {{ template "linux-admin.sh" . }}
 {{ template "nvidia.sh" . }}
+# Per-user tools need no administrator rights, so report them on every machine.
+upgrade_status=0
+{{ range .packages.linux.user_scripts -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    printf 'Dependency still missing: %s. Run chezmoi apply again after resolving the installation error.\n' {{ .name | quote }} >&2
+    upgrade_status=1
+fi
+{{ end -}}
+{{ range .packages.uv_tools -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    printf 'Dependency still missing: %s. Run chezmoi apply again after resolving the installation error.\n' {{ .name | quote }} >&2
+    upgrade_status=1
+fi
+{{ end -}}
 if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
     printf '%s\n' 'Skipping apt upgrade: only Debian/Ubuntu (apt) is supported.'
-    exit 0
+    exit "$upgrade_status"
 fi
 if ! acquire_admin; then
     printf '%s\n' 'Skipping apt upgrade: no administrator rights on this machine. Dotfiles have been applied.'
-    exit 0
+    exit "$upgrade_status"
 fi
 
 printf '%s\n' 'Dotfiles applied. Running the required apt package upgrade.'
-upgrade_status=0
+apt_status=0
 if as_root apt-get update -o APT::Update::Error-Mode=any; then
     # apt upgrade semantics: new dependencies are allowed, removals are not.
     # Keep existing configuration files and ask humans to handle restarts.
     as_root env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l \
         apt-get upgrade -y --with-new-pkgs --no-remove \
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
-        || upgrade_status=1
+        || apt_status=1
 else
-    upgrade_status=1
+    apt_status=1
 fi
-if [ "$upgrade_status" -ne 0 ]; then
+if [ "$apt_status" -ne 0 ]; then
+    upgrade_status=1
     printf '%s\n' 'Apt upgrade is incomplete. Dotfiles remain applied; fix the reported package error and run chezmoi apply again.' >&2
 else
     printf '%s\n' 'Apt upgrade finished.'

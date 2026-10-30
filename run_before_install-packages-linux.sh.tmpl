@@ -2,11 +2,13 @@
 #!/bin/sh
 set -eu
 
-# Debian/Ubuntu. Packages are installed globally and only with administrator
+# Per-user tools (user_scripts, then uv_tools) are installed first, as you,
+# into ~/.local/bin, on any Linux and without administrator rights.
+# Debian/Ubuntu packages and global installers follow only with administrator
 # rights: as root, through passwordless sudo, or through sudo after a single
 # password prompt when you are in an admin group and a terminal is attached.
-# Without them this machine is not yours to provision, so installation is
-# skipped entirely and only configuration files are applied.
+# Without them this machine is not yours to provision globally, so that part is
+# skipped and only per-user tools and configuration files are applied.
 # Runs on every apply but only acts on missing commands. Failures are reported
 # without interrupting the apply. Never changes the login shell or upgrades
 # ordinary tools here. The required apt upgrade runs after dotfiles are applied.
@@ -14,9 +16,29 @@ set -eu
 {{ template "linux-admin.sh" . }}
 {{ template "official-installer.sh" . }}
 {{ template "nvidia.sh" . }}
+failed=''
+note_failure() {
+    failed="$failed $1"
+    printf 'Could not install %s; continuing. It will be retried on the next apply.\n' "$1" >&2
+}
+finish() {
+    if [ -n "$failed" ]; then
+        printf 'Package setup incomplete:%s\n' "$failed" >&2
+    fi
+    exit 0
+}
+
+{{ range .packages.linux.user_scripts -}}
+if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
+    run_official_installer {{ .name | quote }} {{ .url | quote }} {{ .shell | quote }}{{ range .env }} {{ . | quote }}{{ end }} \
+        || note_failure {{ .name | quote }}
+fi
+{{ end -}}
+{{ template "uv-tools.sh" . }}
+
 if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
     printf '%s\n' 'Skipping package installation: only Debian/Ubuntu (apt) is supported.' >&2
-    exit 0
+    finish
 fi
 
 set --
@@ -40,19 +62,13 @@ if [ -n "$nvidia_pci" ] && ! nvidia_healthy; then
     nvidia_pending=1
 fi
 if [ "$#" -eq 0 ] && [ -z "$missing_scripts" ] && [ "$nvidia_pending" -eq 0 ]; then
-    exit 0
+    finish
 fi
 
 if ! acquire_admin; then
     printf '%s\n' 'Skipping package installation: no administrator rights on this machine.'
-    exit 0
+    finish
 fi
-
-failed=''
-note_failure() {
-    failed="$failed $1"
-    printf 'Could not install %s; continuing. It will be retried on the next apply.\n' "$1" >&2
-}
 
 if [ "$#" -gt 0 ]; then
     if as_root apt-get update; then
@@ -92,8 +108,5 @@ if [ "$nvidia_pending" -eq 1 ]; then
     configure_nvidia || note_failure 'NVIDIA driver setup'
 fi
 
-if [ -n "$failed" ]; then
-    printf 'Package setup incomplete:%s\n' "$failed" >&2
-fi
-exit 0
+finish
 {{ end -}}

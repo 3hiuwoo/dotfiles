@@ -2,6 +2,13 @@
 # of how they were installed. Only missing commands are installed. No desktop
 # apps or fonts. Agent CLIs are limited to the Mac `scripts` list below.
 
+# Python CLIs installed per user with `uv tool install` on both systems, after
+# uv itself and without administrator rights. Skipped when uv is unavailable.
+[packages]
+uv_tools = [
+    { name = "huggingface-hub", commands = ["hf"] },
+]
+
 [packages.darwin]
 brews = [
     { name = "ack", commands = ["ack"] },
@@ -137,11 +144,14 @@ apt = [
     { name = "wget", commands = ["wget"] },
     { name = "zoxide", commands = ["zoxide"] },
 ]
+# Official installers run globally with administrator rights, like apt. None yet.
+scripts = []
 
-# Official installers for tools without an apt package; also admin-only, global.
-[[packages.linux.scripts]]
+# Official installers run as you into ~/.local/bin, before and regardless of the
+# administrator check, so shared servers without sudo get them too.
+[[packages.linux.user_scripts]]
 name = "uv"
 commands = ["uv", "uvx"]
 url = "https://astral.sh/uv/install.sh"
 shell = "sh"
-env = ["UV_INSTALL_DIR=/usr/local/bin", "UV_NO_MODIFY_PATH=1"]
+env = ["UV_NO_MODIFY_PATH=1"]

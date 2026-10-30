@@ -3,6 +3,28 @@
 {{- if eq .name "starship" -}}{{- $starshipEnabled = true -}}{{- end -}}
 {{- end -}}
 # Interactive Bash configuration for Linux servers.
+
+# PATH is set before the interactive check so `ssh host uv ...` also finds
+# per-user tools; it prints nothing. Entries are added once, existing or not
+# yet created, so tools installed later in this session are found too.
+_dotfiles_path_prepend() {
+    case :$PATH: in
+        *":$1:"*) ;;
+        *) PATH="$1${PATH:+:$PATH}" ;;
+    esac
+}
+# CUDA toolkit: keep a CUDA_HOME set elsewhere (env.sh, a module, Conda);
+# otherwise use the default /usr/local/cuda symlink when a toolkit provides it.
+# The GPU provisioning installs drivers only, never this toolkit.
+if [[ -z ${CUDA_HOME:-} && -x /usr/local/cuda/bin/nvcc ]]; then
+    export CUDA_HOME=/usr/local/cuda
+fi
+[[ -n ${CUDA_HOME:-} && -d $CUDA_HOME/bin ]] && _dotfiles_path_prepend "$CUDA_HOME/bin"
+# uv, uv tools such as hf, and other per-user installers; wins over system copies.
+_dotfiles_path_prepend "$HOME/.local/bin"
+unset -f _dotfiles_path_prepend
+export PATH
+
 # ssh commands, scp, and other non-interactive sessions must stay quiet.
 case $- in
     *i*) ;;
@@ -14,8 +36,8 @@ _CHEZMOI_BASHRC_LOADED=$$
 
 # History remains local; append so concurrent shells do not overwrite it.
 HISTFILE=$HOME/.bash_history
-HISTSIZE=2000
-HISTFILESIZE=1000
+HISTSIZE=10000
+HISTFILESIZE=20000
 HISTCONTROL=ignoreboth
 shopt -s histappend checkwinsize
 
@@ -57,6 +79,9 @@ fi
 [[ -s ${NVM_DIR:-$HOME/.nvm}/bash_completion ]] && source "${NVM_DIR:-$HOME/.nvm}/bash_completion"
 [[ -r "$HOME/.secrets" ]] && source "$HOME/.secrets"
 
+# less previews archives and other non-text files.
+[[ -x /usr/bin/lesspipe ]] && eval "$(SHELL=/bin/sh lesspipe)"
+
 # Familiar terminal aliases; optional tools are used only when available.
 if command -v eza >/dev/null 2>&1; then
     alias ls='eza --icons=auto -a'
@@ -78,6 +103,7 @@ if command -v uv >/dev/null 2>&1; then
     alias pip='uv pip'
     alias ut='uv tool'
 fi
+alias grep='grep --color=auto'
 alias g=git
 alias gs='git status'
 alias gc='git commit'
@@ -85,6 +111,18 @@ alias cppcompile='c++ -std=c++11'
 alias mv='mv -i'
 alias mkdir='mkdir -p'
 alias df='df -h'
+
+# yazi changes the shell's directory to wherever it was quit.
+if command -v yazi >/dev/null 2>&1; then
+    y() {
+        local tmp cwd
+        tmp=$(mktemp "${TMPDIR:-/tmp}/yazi-cwd.XXXXXX") || return 1
+        command yazi "$@" --cwd-file="$tmp"
+        IFS= read -r -d '' cwd < "$tmp"
+        [[ $cwd != "$PWD" && -d $cwd ]] && builtin cd -- "$cwd"
+        command rm -f -- "$tmp"
+    }
+fi
 
 mkcd() {
     if [[ $# -ne 1 ]]; then
@@ -97,6 +135,9 @@ mkcd() {
 # Match the vi editing mode used in the Mac's zsh, with familiar insert bindings.
 set -o vi
 bind 'set completion-ignore-case on'
+# Like zsh: list ambiguous matches on the first Tab, and let - and _ match.
+bind 'set show-all-if-ambiguous on'
+bind 'set completion-map-case on'
 bind -m vi-insert '"\e[A": history-search-backward'
 bind -m vi-insert '"\e[B": history-search-forward'
 bind -m vi-insert '"\C-a": beginning-of-line'
@@ -104,6 +145,12 @@ bind -m vi-insert '"\C-e": end-of-line'
 bind -m vi-insert '"\eb": backward-word'
 bind -m vi-insert '"\ef": forward-word'
 bind -m vi-insert '"\C-k": kill-line'
+bind -m vi-insert '"\e\C-?": backward-kill-word'
+bind -m vi-insert '"\ed": kill-word'
+# In normal mode, k and j search history for what is typed, as in zsh
+# (readline matches the prefix rather than any substring).
+bind -m vi-command '"k": history-search-backward'
+bind -m vi-command '"j": history-search-forward'
 
 # New FZF releases provide their own Bash initialization. Older distro releases
 # may provide scripts instead. Failure to find bindings does not block startup.
@@ -119,12 +166,28 @@ if command -v fzf >/dev/null 2>&1; then
         done
     fi
     unset _dotfiles_fzf_init _dotfiles_fzf_dir
+    # Defined after the FZF bindings so their functions keep the plain command,
+    # matching zsh, where the bindings load before the aliases.
+    for _dotfiles_bat in bat batcat; do
+        command -v "$_dotfiles_bat" >/dev/null 2>&1 || continue
+        alias fzf="fzf --preview \"$_dotfiles_bat --color=always --style=numbers --line-range=:500 {}\""
+        break
+    done
+    unset _dotfiles_bat
 fi
 
 # A useful SSH prompt without requiring a prompt manager or a Nerd Font.
 case ${TERM:-dumb} in
     dumb|'') PS1='\u@\h:\w\$ ' ;;
     *) PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ ' ;;
+esac
+# Name the terminal tab user@host: dir. PROMPT_COMMAND survives Starship's PS1.
+case ${TERM:-dumb} in
+    dumb|linux|'') ;;
+    *)
+        _dotfiles_set_title() { printf '\e]0;%s@%s: %s\a' "$USER" "${HOSTNAME%%.*}" "${PWD/#$HOME/\~}"; }
+        PROMPT_COMMAND="_dotfiles_set_title${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+        ;;
 esac
 {{ if $starshipEnabled -}}
 command -v starship >/dev/null 2>&1 && eval "$(starship init bash)"

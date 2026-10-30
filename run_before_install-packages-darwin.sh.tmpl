@@ -56,6 +56,7 @@ if ! commands_available{{ range .commands }} {{ . | quote }}{{ end }}; then
         || note_failure {{ .name | quote }}
 fi
 {{ end -}}
+{{ template "uv-tools.sh" . }}
 
 # Node.js through nvm, as recommended by nodejs.org. PROFILE=/dev/null keeps
 # nvm from editing rc files; the managed shells already load it.

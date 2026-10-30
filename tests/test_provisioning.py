@@ -158,6 +158,8 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
         self.setUp_node()
 
     scripts = []
+    user_scripts = []
+    uv_tools = []
     # node/npm/npx present by default so the nvm path is only exercised on purpose.
     def setUp_node(self):
         for name in ["node", "npm", "npx"]:
@@ -175,9 +177,11 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
         section = {kind: packages, "scripts": self.scripts}
         if platform == "darwin":
             section["nvm"] = {"url": "https://nvm.example/install.sh"}
+        else:
+            section["user_scripts"] = self.user_scripts
         data = {
             "chezmoi": {"os": platform, "homeDir": str(self.home)},
-            "packages": {platform: section},
+            "packages": {platform: section, "uv_tools": self.uv_tools},
         }
         return [
             CHEZMOI, "--source", str(SOURCE), "--destination", str(self.home),
@@ -414,14 +418,78 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
                 self.assertIn("apt-get install -y --no-install-recommends --no-upgrade audit-missing ca-certificates", self.calls())
                 self.assertEqual("sudo apt-get update" in self.calls(), uid != "0")
 
-    def test_linux_without_admin_rights_skips_everything(self):
+    def test_linux_without_admin_rights_skips_global_installs(self):
         self.env.update(AUDIT_UID="1000", AUDIT_SUDO_NOPASS="0", AUDIT_GROUPS="users")
-        self.scripts = [{"name": "uv", "commands": ["audit-uv"], "url": "https://uv.example/i.sh",
+        self.scripts = [{"name": "global", "commands": ["audit-global"], "url": "https://g.example/i.sh",
                          "shell": "sh", "env": []}]
         result = self.run_installer("linux", [{"name": "audit-missing", "commands": ["audit-missing"]}])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no administrator rights", result.stdout)
         self.assertEqual(self.calls(), "")
+
+    def uv_stub(self):
+        self.stub("uv", 'printf "uv %s\\n" "$*" >> "$AUDIT_LOG"\n'
+                  '[ "${AUDIT_UV_FAIL:-}" = "$4" ] && exit 2\nexit 0')
+
+    def test_linux_user_tools_install_without_admin_rights(self):
+        self.env.update(AUDIT_UID="1000", AUDIT_SUDO_NOPASS="0", AUDIT_GROUPS="users")
+        self.uv_stub()
+        self.user_scripts = [{"name": "audit-installer", "commands": ["audit-installer"],
+                              "url": "https://u.example/i.sh", "shell": "sh",
+                              "env": ["UV_NO_MODIFY_PATH=1"]}]
+        self.uv_tools = [{"name": "audit-pkg", "commands": ["audit-cli"]}]
+        result = self.run_installer("linux", [{"name": "audit-missing", "commands": ["audit-missing"]}])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        self.assertIn("installer ran: SHELL=/bin/sh", calls)
+        self.assertIn("uv tool install --managed-python audit-pkg", calls)
+        self.assertNotIn("sudo", calls)
+        self.assertNotIn("apt-get", calls)
+        self.assertIn("no administrator rights", result.stdout)
+
+    def test_existing_global_user_tools_are_not_reinstalled(self):
+        self.uv_stub()
+        self.stub("audit-installer")
+        self.stub("audit-cli")
+        self.user_scripts = [{"name": "audit-installer", "commands": ["audit-installer"],
+                              "url": "https://u.example/i.sh", "shell": "sh", "env": []}]
+        self.uv_tools = [{"name": "audit-pkg", "commands": ["audit-cli"]}]
+        result = self.run_installer("linux", [])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), "")
+
+    def test_uv_tools_are_skipped_when_uv_is_unavailable(self):
+        self.env["AUDIT_CURL_FAIL"] = "https://u.example/i.sh"
+        self.user_scripts = [{"name": "uv", "commands": ["audit-uv"],
+                              "url": "https://u.example/i.sh", "shell": "sh", "env": []}]
+        self.uv_tools = [{"name": "audit-pkg", "commands": ["audit-cli"]}]
+        result = self.run_installer("linux", [{"name": "audit-missing", "commands": ["audit-missing"]}])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("audit-pkg (uv unavailable)", result.stderr)
+        self.assertIn("Package setup incomplete: uv audit-pkg (uv unavailable)", result.stderr)
+        self.assertIn("--no-upgrade audit-missing", self.calls())
+
+    def test_one_failed_uv_tool_does_not_stop_the_others(self):
+        self.uv_stub()
+        self.env["AUDIT_UV_FAIL"] = "audit-bad"
+        self.uv_tools = [{"name": "audit-bad", "commands": ["audit-bad-cli"]},
+                         {"name": "audit-good", "commands": ["audit-good-cli"]}]
+        for platform in ["linux", "darwin"]:
+            with self.subTest(platform=platform):
+                self.log.unlink(missing_ok=True)
+                result = self.run_installer(platform, [])
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("uv tool install --managed-python audit-good", self.calls())
+                self.assertIn("Package setup incomplete: audit-bad", result.stderr)
+
+    def test_final_check_reports_missing_user_tools_without_admin(self):
+        self.env.update(AUDIT_UID="1000", AUDIT_SUDO_NOPASS="0")
+        self.uv_tools = [{"name": "audit-pkg", "commands": ["audit-cli"]}]
+        result = self.run_installer("linux", [], after=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Dependency still missing: audit-pkg", result.stderr)
+        self.assertIn("Skipping apt upgrade", result.stdout)
+        self.assertNotIn("apt-get", self.calls())
 
     def test_linux_admin_group_without_terminal_skips(self):
         # sudo needs a password and no terminal can answer: skip, never hang.
@@ -716,6 +784,12 @@ printf 'echo "installer ran: SHELL=$SHELL $*" >> "$AUDIT_LOG"\n' > "$out"''')
     def test_manifest_has_no_desktop_downloads(self):
         packages = tomllib.loads((SOURCE / ".chezmoidata/packages.toml").read_text())["packages"]
         self.assertNotIn("casks", packages["darwin"])
+        # uv and hf are per-user on both systems, never apt or global installs.
+        self.assertEqual([t["name"] for t in packages["uv_tools"]], ["huggingface-hub"])
+        self.assertNotIn("uv", {s["name"] for s in packages["linux"]["scripts"]})
+        self.assertNotIn("hf", {a["name"] for a in packages["linux"]["apt"]})
+        names = {s["name"] for s in packages["darwin"]["scripts"]}
+        self.assertNotIn("hf", names)
         names = {item["name"] for item in packages["darwin"]["brews"]}
         self.assertFalse(names & {"ghostty", "zed", "rectangle", "font-fira-code-nerd-font"})
 
