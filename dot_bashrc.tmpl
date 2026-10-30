@@ -97,7 +97,18 @@ elif command -v batcat >/dev/null 2>&1; then
     alias bat=batcat
     alias cat='batcat --paging=never'
 fi
-command -v batman >/dev/null 2>&1 && alias man=batman
+if command -v batman >/dev/null 2>&1; then
+    alias man=batman
+elif command -v col >/dev/null 2>&1; then
+    # Without bat-extras (not in apt), colour man pages through bat directly.
+    for _dotfiles_bat in bat batcat; do
+        # type -P skips the bat=batcat alias, which sh -c cannot see.
+        type -P "$_dotfiles_bat" >/dev/null 2>&1 || continue
+        export MANPAGER="sh -c 'col -bx | $_dotfiles_bat --language=man --plain'"
+        break
+    done
+    unset _dotfiles_bat
+fi
 command -v lazygit >/dev/null 2>&1 && alias lg=lazygit
 if command -v uv >/dev/null 2>&1; then
     alias pip='uv pip'
@@ -151,6 +162,19 @@ bind -m vi-insert '"\ed": kill-word'
 # (readline matches the prefix rather than any substring).
 bind -m vi-command '"k": history-search-backward'
 bind -m vi-command '"j": history-search-forward'
+# Show the vi mode before the prompt; \1 and \2 hide colour codes from readline's
+# width count. Starship cannot report the vi mode in Bash, so this covers it too.
+bind 'set show-mode-in-prompt on'
+case ${TERM:-dumb} in
+    dumb|'')
+        bind 'set vi-ins-mode-string "[I] "'
+        bind 'set vi-cmd-mode-string "[N] "'
+        ;;
+    *)
+        bind 'set vi-ins-mode-string "\1\e[1;32m\2[I]\1\e[0m\2 "'
+        bind 'set vi-cmd-mode-string "\1\e[1;33m\2[N]\1\e[0m\2 "'
+        ;;
+esac
 
 # New FZF releases provide their own Bash initialization. Older distro releases
 # may provide scripts instead. Failure to find bindings does not block startup.

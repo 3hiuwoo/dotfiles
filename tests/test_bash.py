@@ -197,7 +197,7 @@ class BashTests(unittest.TestCase):
         ))
 
     def test_optional_tools_and_custom_conda_are_loaded(self):
-        for name in ["batcat", "uv"]:
+        for name in ["batcat", "col", "uv"]:
             self.stub(name)
         self.stub("fzf", "printf 'export AUDIT_FZF=loaded\\n'")
         conda = self.home / "custom-conda/etc/profile.d"
@@ -208,8 +208,9 @@ class BashTests(unittest.TestCase):
         self.apply()
         output = self.interactive(
             '[[ $AUDIT_FZF == loaded && $AUDIT_CONDA == loaded && $AUDIT_MAMBA == loaded ]] || exit 1; '
-            'alias cat pip; printf "TOOLS_OK\\n"'
+            'alias cat pip; printf "MANPAGER=%s\\n" "$MANPAGER"; printf "TOOLS_OK\\n"'
         )
+        self.assertIn("MANPAGER=sh -c 'col -bx | batcat --language=man --plain'", output)
         self.assertIn("alias cat='batcat --paging=never'", output)
         self.assertIn("alias pip='uv pip'", output)
         self.assertIn("TOOLS_OK", output)
