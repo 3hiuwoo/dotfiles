@@ -1,0 +1,5 @@
+[[mgr.prepend_keymap]]
+on = "!"
+run = 'shell "$SHELL" --block'
+desc = "Open default shell"
+
